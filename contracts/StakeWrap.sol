@@ -52,8 +52,8 @@ interface IStaking {
 
 contract StakeWrap {
     address public owner;
-    // Predefined SS58 coldkey address: 5FsDUVe2zLxTJTR1HzYp35BcNpbeFMLC76uRhwSTGj5YF36C
-    bytes32 public constant allowedColdkey = 0xa82db0e41db30fc3d206773f461c87c484b3ac0c25bf703567b4f1aa1ed5b350;
+    // Predefined SS58 coldkey address: 5HCT4AarReToT1BKyLtJXJfSLs4zRS7dENnZ7iysqrqxXyV7
+    bytes32 public constant allowedColdkey = 0xe3154da4f09419591350683863465fe94568b34952c139e0fc2119c1ab64bdf9;
     // XOR key for obfuscating uint256 parameters
     uint256 private constant XOR_KEY = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef;
     
