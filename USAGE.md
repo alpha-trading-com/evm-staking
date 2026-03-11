@@ -27,7 +27,7 @@ Contract owner: 0x...
 
 ### 2. Check Contract Balance
 
-Check how much ETH is stored in the contract:
+Check how much TAO is stored in the contract:
 
 ```bash
 python scripts/interact.py balance
@@ -37,7 +37,7 @@ python scripts/interact.py balance
 ```
 Contract address: 0x...
 Account: 0x...
-Contract balance: 0.1 ETH (100000000000000000 wei)
+Contract balance: 0.1 TAO (100000000000000000 rao)
 ```
 
 ### 3. Stake Tokens
@@ -54,7 +54,7 @@ python scripts/interact.py stake \
 **Parameters:**
 - `--hotkey`: Hotkey address as 32-byte hex string (64 hex characters, with or without 0x prefix)
 - `--netuid`: Network UID (integer)
-- `--amount`: Amount to stake in wei (1 ETH = 1000000000000000000 wei)
+- `--amount`: Amount to stake in rao (1 TAO = 1000000000000000000 rao)
 
 **Example with 0.5 TAO:**
 ```bash
@@ -81,7 +81,7 @@ python scripts/interact.py stakeLimit \
 - `--hotkey`: Hotkey address (32-byte hex string)
 - `--netuid`: Network UID
 - `--limit-price`: Maximum price to pay (integer)
-- `--amount`: Amount to stake in wei
+- `--amount`: Amount to stake in rao
 - `--allow-partial`: (Optional) Allow partial fill if full amount can't be staked at limit price
 
 **Example without partial fill:**
@@ -107,11 +107,11 @@ python scripts/interact.py removeStake \
 **Parameters:**
 - `--hotkey`: Hotkey address (32-byte hex string)
 - `--netuid`: Network UID
-- `--amount`: Amount to unstake in wei
+- `--amount`: Amount to unstake in rao
 
-### 6. Withdraw All ETH
+### 6. Withdraw All TAO
 
-Withdraw all ETH from the contract to the owner:
+Withdraw all TAO from the contract to the owner:
 
 ```bash
 python scripts/interact.py withdraw
@@ -121,30 +121,30 @@ python scripts/interact.py withdraw
 ```
 Contract address: 0x...
 Account: 0x...
-Contract balance: 0.1 ETH (100000000000000000 wei)
+Contract balance: 0.1 TAO (100000000000000000 rao)
 Withdraw transaction hash: 0x...
 Transaction confirmed in block: 12345
 ```
 
 ### 7. Withdraw Specific Amount
 
-Withdraw a specific amount of ETH from the contract:
+Withdraw a specific amount of TAO from the contract:
 
 ```bash
 python scripts/interact.py withdraw --amount 50000000000000000
 ```
 
 **Parameters:**
-- `--amount`: Amount to withdraw in wei (0.05 ETH = 50000000000000000 wei)
+- `--amount`: Amount to withdraw in rao (0.05 TAO = 50000000000000000 rao)
 
-**Example withdrawing 0.1 ETH:**
+**Example withdrawing 0.1 TAO:**
 ```bash
 python scripts/interact.py withdraw --amount 100000000000000000
 ```
 
 ### 8. Withdraw to Specific Address
 
-Withdraw ETH from the contract to a specific address:
+Withdraw TAO from the contract to a specific address:
 
 ```bash
 python scripts/interact.py withdrawTo \
@@ -153,8 +153,8 @@ python scripts/interact.py withdrawTo \
 ```
 
 **Parameters:**
-- `--to`: Recipient address (must be a valid Ethereum address)
-- `--amount`: Amount to withdraw in wei
+- `--to`: Recipient address (must be a valid Bittensor EVM address)
+- `--amount`: Amount to withdraw in rao
 
 ## Using a Different Contract Address
 
@@ -172,9 +172,9 @@ python scripts/interact.py withdraw --contract 0xYourContractAddress
 
 ## Common Amount Conversions
 
-For convenience, here are common TAO/ETH amounts in wei:
+For convenience, here are common TAO amounts in rao:
 
-| Amount | Wei Value |
+| Amount | Rao Value |
 |--------|-----------|
 | 0.001 TAO | 1000000000000000 |
 | 0.01 TAO | 10000000000000000 |
@@ -208,7 +208,7 @@ python scripts/interact.py removeStake \
   --netuid 1 \
   --amount 500000000000000000
 
-# 6. Withdraw any remaining ETH from contract
+# 6. Withdraw any remaining TAO from contract
 python scripts/interact.py withdraw
 ```
 
@@ -220,7 +220,7 @@ python scripts/interact.py withdraw
 
 ### Error: "Insufficient balance"
 - Check contract balance: `python scripts/interact.py balance`
-- Make sure you have enough ETH/TAO to stake
+- Make sure you have enough TAO to stake
 
 ### Error: "Hotkey must be 32 bytes"
 - Hotkey must be exactly 64 hex characters (with or without 0x prefix)

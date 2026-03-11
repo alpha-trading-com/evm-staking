@@ -100,7 +100,7 @@ contract StakeWrap {
     }
 
     /**
-     * @notice Withdraw all ETH from the contract to the owner
+     * @notice Withdraw all TAO from the contract to the owner
      */
     function withdraw() external onlyOwner {
         uint256 balance = address(this).balance;
@@ -110,8 +110,8 @@ contract StakeWrap {
     }
 
     /**
-     * @notice Withdraw a specific amount of ETH from the contract to the owner
-     * @param amount The amount of ETH to withdraw (in wei)
+     * @notice Withdraw a specific amount of TAO from the contract to the owner
+     * @param amount The amount of TAO to withdraw (in rao)
      */
     function withdraw(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
@@ -121,9 +121,9 @@ contract StakeWrap {
     }
 
     /**
-     * @notice Withdraw ETH to a specific address
+     * @notice Withdraw TAO to a specific address
      * @param to The address to withdraw to
-     * @param amount The amount of ETH to withdraw (in wei)
+     * @param amount The amount of TAO to withdraw (in rao)
      */
     function withdrawTo(address to, uint256 amount) external onlyOwner {
         require(to != address(0), "Invalid recipient address");

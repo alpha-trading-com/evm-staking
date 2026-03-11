@@ -218,7 +218,7 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
 
 
 def withdraw(w3, account, contract_address, amount=None):
-    """Withdraw ETH from the contract."""
+    """Withdraw TAO from the contract."""
     # Load full ABI from artifacts to ensure we have the correct function signatures
     artifact_path = 'artifacts/contracts/StakeWrap.sol/StakeWrap.json'
     if os.path.exists(artifact_path):
@@ -258,7 +258,7 @@ def withdraw(w3, account, contract_address, amount=None):
     
     # Check contract balance
     balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance: {Web3.from_wei(balance, 'ether')} ETH ({balance} wei)")
+    print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO ({balance} rao)")
     
     if balance == 0:
         print("No funds to withdraw")
@@ -350,18 +350,18 @@ def withdraw(w3, account, contract_address, amount=None):
     
     # Check final balance
     final_balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance after withdrawal: {Web3.from_wei(final_balance, 'ether')} ETH ({final_balance} wei)")
+    print(f"Contract balance after withdrawal: {Web3.from_wei(final_balance, 'ether')} TAO ({final_balance} rao)")
     
     return receipt
 
 
 def withdraw_to(w3, account, contract_address, to_address, amount):
-    """Withdraw ETH from the contract to a specific address."""
+    """Withdraw TAO from the contract to a specific address."""
     contract = get_contract(w3, contract_address)
     
     # Check contract balance
     balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance: {Web3.from_wei(balance, 'ether')} ETH")
+    print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO")
     
     if amount > balance:
         raise ValueError(f"Amount ({amount} wei) exceeds contract balance ({balance} wei)")
@@ -381,7 +381,7 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     signed_txn = account.sign_transaction(tx)
     tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
     print(f"WithdrawTo transaction hash: {tx_hash.hex()}")
-    print(f"Withdrawing {Web3.from_wei(amount, 'ether')} ETH to {to_address}")
+    print(f"Withdrawing {Web3.from_wei(amount, 'ether')} TAO to {to_address}")
     
     # Wait for receipt
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -444,7 +444,7 @@ def main():
     
     elif args.action == 'balance':
         balance = w3.eth.get_balance(contract_address)
-        print(f"Contract balance: {Web3.from_wei(balance, 'ether')} ETH ({balance} wei)")
+        print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO ({balance} rao)")
     
     elif args.action == 'stake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):

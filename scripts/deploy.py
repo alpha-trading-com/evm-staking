@@ -75,7 +75,7 @@ def main():
     account = Account.from_key(private_key)
     print(f"Deploying from account: {account.address}")
     balance = w3.eth.get_balance(account.address)
-    print(f"Account balance: {Web3.from_wei(balance, 'ether')} ETH")
+    print(f"Account balance: {Web3.from_wei(balance, 'ether')} TAO")
     
     # Load contract artifacts
     artifact_path = 'artifacts/contracts/StakeWrap.sol/StakeWrap.json'
