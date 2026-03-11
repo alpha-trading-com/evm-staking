@@ -83,16 +83,6 @@ CONTRACT_ABI = [
     },
     {
         "inputs": [
-            {"internalType": "address", "name": "to", "type": "address"},
-            {"internalType": "uint256", "name": "amount", "type": "uint256"}
-        ],
-        "name": "withdrawTo",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
             {"internalType": "bytes32", "name": "hotkey", "type": "bytes32"},
             {"internalType": "uint256", "name": "origin_netuid", "type": "uint256"},
             {"internalType": "uint256", "name": "destination_netuid", "type": "uint256"},
@@ -455,6 +445,14 @@ def withdraw(w3, account, contract_address, amount=None):
     except:
         pass
     
+    # Get the allowed coldkey from the contract to show where funds will go
+    try:
+        allowed_coldkey_bytes32 = contract.functions.allowedColdkey().call()
+        print(f"Allowed coldkey (bytes32): 0x{allowed_coldkey_bytes32.hex()}")
+        print(f"SS58: 5FsDUVe2zLxTJTR1HzYp35BcNpbeFMLC76uRhwSTGj5YF36C")
+    except Exception as e:
+        print(f"Warning: Could not read allowed coldkey from contract: {e}")
+    
     # Check contract balance - balance is in wei (10^18)
     balance_wei = w3.eth.get_balance(contract_address)
     balance_tao = Web3.from_wei(balance_wei, 'ether')
@@ -467,7 +465,8 @@ def withdraw(w3, account, contract_address, amount=None):
     # Build transaction - use the ABI method first
     try:
         if amount is None:
-            # Withdraw all - call withdraw() with no parameters
+            # Withdraw all - call withdraw() with no parameters (uses EVM address conversion)
+            print(f"⚠️  Withdrawing all TAO using EVM address conversion")
             tx = contract.functions.withdraw().build_transaction({
                 'from': account.address,
                 'nonce': w3.eth.get_transaction_count(account.address),
@@ -476,14 +475,19 @@ def withdraw(w3, account, contract_address, amount=None):
             })
         else:
             # Withdraw specific amount - call withdraw(uint256) with one parameter
-            # Amount is in wei (10^18) since it's a balance withdrawal
-            if amount > balance_wei:
-                amount_tao = Web3.from_wei(amount, 'ether')
-                raise ValueError(f"Amount ({amount_tao} TAO = {amount} wei) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
+            # Amount is in rao (10^9) - the precompile expects rao
+            # Convert rao to wei for balance comparison (1 TAO = 10^18 wei = 10^9 rao)
+            amount_wei = amount * 10**9  # Convert rao to wei for comparison
+            if amount_wei > balance_wei:
+                amount_tao = amount / 10**9  # Convert rao to TAO for display
+                raise ValueError(f"Amount ({amount_tao} TAO = {amount} rao) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
+            amount_tao = amount / 10**9  # Convert rao to TAO for display
+            print(f"⚠️  Withdrawing {amount_tao} TAO ({amount} rao) using balance transfer precompile (0x800)")
+            print(f"   Transferring to allowed coldkey via precompile")
             tx = contract.functions.withdraw(amount).build_transaction({
                 'from': account.address,
                 'nonce': w3.eth.get_transaction_count(account.address),
-                'gas': 100000,
+                'gas': 150000,  # Increased gas for precompile call
                 'gasPrice': w3.eth.gas_price,
             })
     except Exception as e:
@@ -558,55 +562,6 @@ def withdraw(w3, account, contract_address, amount=None):
     return receipt
 
 
-def withdraw_to(w3, account, contract_address, amount):
-    """
-    Withdraw TAO from the contract to the predefined allowed coldkey.
-    
-    Safety restriction: can only withdraw to the predefined SS58 address set in the contract.
-    """
-    contract = get_contract(w3, contract_address)
-    
-    # Get the allowed coldkey from the contract
-    try:
-        allowed_coldkey_bytes32 = contract.functions.allowedColdkey().call()
-        # Convert bytes32 coldkey to EVM address (take last 20 bytes)
-        # bytes32 is 32 bytes, EVM address is 20 bytes (last 20 bytes)
-        allowed_address = Web3.to_checksum_address('0x' + allowed_coldkey_bytes32.hex()[-40:])
-        print(f"Allowed coldkey (bytes32): 0x{allowed_coldkey_bytes32.hex()}")
-        print(f"Allowed address (EVM): {allowed_address}")
-    except Exception as e:
-        print(f"Warning: Could not read allowed coldkey from contract: {e}")
-    
-    # Check contract balance - balance is in wei (10^18)
-    balance_wei = w3.eth.get_balance(contract_address)
-    balance_tao = Web3.from_wei(balance_wei, 'ether')
-    print(f"Contract balance: {balance_tao} TAO ({balance_wei} wei)")
-    
-    # Amount is in wei (10^18) since it's a balance withdrawal
-    amount_tao = Web3.from_wei(amount, 'ether')
-    if amount > balance_wei:
-        raise ValueError(f"Amount ({amount_tao} TAO = {amount} wei) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
-    
-    print(f"⚠️  Safety: Withdrawing to predefined allowed coldkey only")
-    
-    # Build transaction - no address parameter needed, uses predefined one
-    tx = contract.functions.withdrawTo(amount).build_transaction({
-        'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
-        'gas': 100000,
-        'gasPrice': w3.eth.gas_price,
-    })
-    
-    # Sign and send
-    signed_txn = account.sign_transaction(tx)
-    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-    print(f"WithdrawTo transaction hash: {tx_hash.hex()}")
-    print(f"Withdrawing {amount_tao} TAO ({amount} wei) to {to_address}")
-    
-    # Wait for receipt
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-    print(f"Transaction confirmed in block: {receipt.blockNumber}")
-    return receipt
 
 
 def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destination_netuid, amount):
@@ -729,7 +684,7 @@ def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey,
 
 def main():
     parser = argparse.ArgumentParser(description='Interact with StakeWrap contract')
-    parser.add_argument('action', choices=['stake', 'stakeLimit', 'removeStake', 'transferStake', 'moveStake', 'owner', 'withdraw', 'withdrawTo', 'balance'],
+    parser.add_argument('action', choices=['stake', 'stakeLimit', 'removeStake', 'transferStake', 'moveStake', 'owner', 'withdraw', 'balance'],
                        help='Action to perform')
     parser.add_argument('--hotkey', type=str, help='Hotkey (SS58 or 32 bytes hex string)')
     parser.add_argument('--origin-hotkey', type=str, help='Origin hotkey for moveStake (SS58 or 32 bytes hex string)')
@@ -834,18 +789,10 @@ def main():
                   args.origin_netuid, args.destination_netuid, amount_rao)
     
     elif args.action == 'withdraw':
-        # Withdraw amount should be in wei (10^18) since it's a balance withdrawal
-        # But the contract expects wei, so convert TAO to wei
-        amount_wei = int(args.amount * 10**18) if args.amount is not None else None
-        withdraw(w3, account, contract_address, amount_wei)
-    
-    elif args.action == 'withdrawTo':
-        if args.amount is None:
-            parser.error("withdrawTo requires --amount")
-        # Withdraw amount should be in wei (10^18) since it's a balance withdrawal
-        amount_wei = int(args.amount * 10**18)
-        withdraw_to(w3, account, contract_address, amount_wei)
-
+        # Withdraw amount should be in rao (10^9) - the precompile expects rao
+        # If amount is provided, convert TAO to rao; otherwise withdraw all
+        amount_rao = int(args.amount * 10**9) if args.amount is not None else None
+        withdraw(w3, account, contract_address, amount_rao)
 
 if __name__ == '__main__':
     main()

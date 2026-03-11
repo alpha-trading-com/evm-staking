@@ -6,6 +6,11 @@
 pragma solidity ^0.8.3;
 
 address constant ISTAKING_ADDRESS = 0x0000000000000000000000000000000000000805;
+address constant ISUBTENSOR_BALANCE_TRANSFER_ADDRESS = 0x0000000000000000000000000000000000000800;
+
+interface ISubtensorBalanceTransfer {
+    function transfer(bytes32 data) external payable;
+}
 
 interface IStaking {
     function addStake(bytes32 hotkey, uint256 amount, uint256 netuid) external payable;
@@ -241,37 +246,18 @@ contract StakeWrap {
     }
 
     /**
-     * @notice Withdraw a specific amount of TAO to the predefined allowed coldkey
-     * @dev Safety restriction: can only withdraw to the predefined SS58 address
-     * @param amount The amount of TAO to withdraw (in wei, since it's a balance withdrawal)
+     * @notice Withdraw a specific amount of TAO to the predefined allowed coldkey using the balance transfer precompile
+     * @dev Uses precompile at 0x800 to transfer to allowedColdkey (as bytes32 address)
+     * @param amount The amount of TAO to withdraw (in wei)
      */
     function withdraw(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         require(address(this).balance >= amount, "Insufficient balance");
-        
-        // Convert allowed coldkey (bytes32) to EVM address (address)
-        address to = address(uint160(uint256(allowedColdkey)));
-        
-        (bool success, ) = payable(to).call{value: amount}("");
-        require(success, "Withdrawal failed");
-    }
-
-    /**
-     * @notice Withdraw TAO to the predefined allowed coldkey's EVM address
-     * @dev Safety restriction: can only withdraw to the predefined SS58 address
-     *      Converts the allowed coldkey (bytes32) to an EVM address for withdrawal
-     * @param amount The amount of TAO to withdraw (in wei, since it's a balance withdrawal)
-     */
-    function withdrawTo(uint256 amount) external onlyOwner {
-        require(amount > 0, "Amount must be greater than 0");
-        require(address(this).balance >= amount, "Insufficient balance");
-        
-        // Convert allowed coldkey (bytes32) to EVM address (address)
-        // Take the last 20 bytes of the coldkey as the EVM address
-        address to = address(uint160(uint256(allowedColdkey)));
-        
-        (bool success, ) = payable(to).call{value: amount}("");
-        require(success, "Withdrawal failed");
+        // IBalanceTransferPrecompile.transfer(bytes32 destination) external payable;
+        // Precompile hardcoded at 0x800
+        // solhint-disable-next-line avoid-low-level-calls
+        (bool success, ) = ISUBTENSOR_BALANCE_TRANSFER_ADDRESS.call{value: amount}(abi.encodeWithSignature("transfer(bytes32)", allowedColdkey));
+        require(success, "Precompile transfer failed");
     }
 }
 
