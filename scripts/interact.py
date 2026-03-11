@@ -222,6 +222,35 @@ def ss58_to_bytes32(ss58_address):
         raise ValueError(f"Failed to decode SS58 address '{ss58_address}': {e}")
 
 
+def _convert_hotkey_to_bytes32(hotkey):
+    """
+    Convert hotkey string (SS58 or hex) to bytes32.
+    
+    Args:
+        hotkey: Hotkey as string (SS58 or hex) or bytes
+    
+    Returns:
+        bytes32 representation of the hotkey
+    """
+    if isinstance(hotkey, str):
+        # Check if it's SS58 format (starts with 5 and is base58)
+        if hotkey.startswith('5') and len(hotkey) > 40:
+            try:
+                hotkey_bytes = ss58_to_bytes32(hotkey)
+                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
+            except Exception as e:
+                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
+        # Check if it's hex format (0x... or just hex)
+        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
+            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
+            if len(hotkey_bytes) != 32:
+                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        else:
+            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
+        return hotkey_bytes
+    return hotkey
+
+
 def stake(w3, account, contract_address, hotkey, netuid, amount):
     """Stake tokens."""
     contract = get_contract(w3, contract_address)
@@ -249,22 +278,7 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
         raise ValueError(f"Insufficient contract balance: need {amount} rao ({amount_tao} TAO), have {contract_balance_wei} wei ({contract_balance_tao} TAO)")
     
     # Convert hotkey string to bytes32
-    if isinstance(hotkey, str):
-        # Check if it's SS58 format (starts with 5 and is base58)
-        if hotkey.startswith('5') and len(hotkey) > 40:
-            try:
-                hotkey_bytes = ss58_to_bytes32(hotkey)
-                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
-            except Exception as e:
-                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
-        # Check if it's hex format (0x... or just hex)
-        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
-            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-            if len(hotkey_bytes) != 32:
-                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
-        else:
-            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
-        hotkey = hotkey_bytes
+    hotkey = _convert_hotkey_to_bytes32(hotkey)
     
     print(f"Staking {amount / 10**9} TAO ({amount} rao) to netuid {netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
@@ -319,22 +333,7 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
     contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
-    if isinstance(hotkey, str):
-        # Check if it's SS58 format (starts with 5 and is base58)
-        if hotkey.startswith('5') and len(hotkey) > 40:
-            try:
-                hotkey_bytes = ss58_to_bytes32(hotkey)
-                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
-            except Exception as e:
-                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
-        # Check if it's hex format (0x... or just hex)
-        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
-            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-            if len(hotkey_bytes) != 32:
-                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
-        else:
-            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
-        hotkey = hotkey_bytes
+    hotkey = _convert_hotkey_to_bytes32(hotkey)
     
     # Build transaction - XOR encode uint256 parameters
     tx = contract.functions.stakeLimit(
@@ -371,22 +370,7 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
-    if isinstance(hotkey, str):
-        # Check if it's SS58 format (starts with 5 and is base58)
-        if hotkey.startswith('5') and len(hotkey) > 40:
-            try:
-                hotkey_bytes = ss58_to_bytes32(hotkey)
-                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
-            except Exception as e:
-                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
-        # Check if it's hex format (0x... or just hex)
-        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
-            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-            if len(hotkey_bytes) != 32:
-                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
-        else:
-            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
-        hotkey = hotkey_bytes
+    hotkey = _convert_hotkey_to_bytes32(hotkey)
     
     print(f"Unstaking {amount} ALPHA tokens from netuid {netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
@@ -414,6 +398,96 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
     print(f"Transaction confirmed in block: {receipt.blockNumber}")
     return receipt
+
+
+def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destination_netuid, amount):
+    """
+    Transfer stake (alpha) to the predefined allowed coldkey only.
+    
+    Safety restriction: can only transfer to the predefined SS58 address set in the contract.
+    """
+    contract = get_contract(w3, contract_address)
+    
+    # Get the allowed coldkey from the contract
+    try:
+        allowed_coldkey_bytes32 = contract.functions.allowedColdkey().call()
+        print(f"Allowed coldkey (bytes32): 0x{allowed_coldkey_bytes32.hex()}")
+    except Exception as e:
+        print(f"Warning: Could not read allowed coldkey from contract: {e}")
+    
+    # Convert hotkey string to bytes32
+    hotkey = _convert_hotkey_to_bytes32(hotkey)
+    
+    print(f"Transferring {amount / 10**9} TAO ({amount} rao) worth of stake (alpha)")
+    print(f"From netuid {origin_netuid} to netuid {destination_netuid}")
+    print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
+    print(f"⚠️  Safety: Transferring to predefined allowed coldkey only")
+    
+    # Build transaction - no destination_coldkey parameter needed, uses predefined one
+    # XOR encode uint256 parameters
+    tx = contract.functions.transferStake(
+        hotkey,
+        xor_encode(origin_netuid),
+        xor_encode(destination_netuid),
+        xor_encode(amount)  # Amount in rao
+    ).build_transaction({
+        'from': account.address,
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'gas': 200000,
+        'gasPrice': w3.eth.gas_price,
+    })
+    
+    # Sign and send
+    signed_txn = account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    print(f"TransferStake transaction hash: {tx_hash.hex()}")
+    
+    # Wait for receipt
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print(f"Transaction confirmed in block: {receipt.blockNumber}")
+    return receipt
+
+
+def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey, origin_netuid, destination_netuid, amount):
+    """
+    Move stake from one hotkey to another.
+    
+    This moves stake (alpha) between different hotkeys.
+    """
+    contract = get_contract(w3, contract_address)
+    
+    # Convert hotkey strings to bytes32
+    origin_hotkey = _convert_hotkey_to_bytes32(origin_hotkey)
+    destination_hotkey = _convert_hotkey_to_bytes32(destination_hotkey)
+    
+    print(f"Moving {amount / 10**9} TAO ({amount} rao) worth of stake")
+    print(f"From hotkey 0x{origin_hotkey.hex()} (netuid {origin_netuid})")
+    print(f"To hotkey 0x{destination_hotkey.hex()} (netuid {destination_netuid})")
+    
+    # Build transaction - XOR encode uint256 parameters
+    tx = contract.functions.moveStake(
+        origin_hotkey,
+        destination_hotkey,
+        xor_encode(origin_netuid),
+        xor_encode(destination_netuid),
+        xor_encode(amount)  # Amount in rao
+    ).build_transaction({
+        'from': account.address,
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'gas': 200000,
+        'gasPrice': w3.eth.gas_price,
+    })
+    
+    # Sign and send
+    signed_txn = account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    print(f"MoveStake transaction hash: {tx_hash.hex()}")
+    
+    # Wait for receipt
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print(f"Transaction confirmed in block: {receipt.blockNumber}")
+    return receipt
+
 
 
 def withdraw(w3, account, contract_address, amount):
@@ -543,126 +617,6 @@ def withdraw(w3, account, contract_address, amount):
     
     return receipt
 
-
-
-
-def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destination_netuid, amount):
-    """
-    Transfer stake (alpha) to the predefined allowed coldkey only.
-    
-    Safety restriction: can only transfer to the predefined SS58 address set in the contract.
-    """
-    contract = get_contract(w3, contract_address)
-    
-    # Get the allowed coldkey from the contract
-    try:
-        allowed_coldkey_bytes32 = contract.functions.allowedColdkey().call()
-        print(f"Allowed coldkey (bytes32): 0x{allowed_coldkey_bytes32.hex()}")
-    except Exception as e:
-        print(f"Warning: Could not read allowed coldkey from contract: {e}")
-    
-    # Convert hotkey string to bytes32
-    if isinstance(hotkey, str):
-        if hotkey.startswith('5') and len(hotkey) > 40:
-            try:
-                hotkey_bytes = ss58_to_bytes32(hotkey)
-                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
-            except Exception as e:
-                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
-        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
-            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-            if len(hotkey_bytes) != 32:
-                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
-        else:
-            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
-        hotkey = hotkey_bytes
-    
-    print(f"Transferring {amount / 10**9} TAO ({amount} rao) worth of stake (alpha)")
-    print(f"From netuid {origin_netuid} to netuid {destination_netuid}")
-    print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
-    print(f"⚠️  Safety: Transferring to predefined allowed coldkey only")
-    
-    # Build transaction - no destination_coldkey parameter needed, uses predefined one
-    # XOR encode uint256 parameters
-    tx = contract.functions.transferStake(
-        hotkey,
-        xor_encode(origin_netuid),
-        xor_encode(destination_netuid),
-        xor_encode(amount)  # Amount in rao
-    ).build_transaction({
-        'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
-        'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
-    })
-    
-    # Sign and send
-    signed_txn = account.sign_transaction(tx)
-    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-    print(f"TransferStake transaction hash: {tx_hash.hex()}")
-    
-    # Wait for receipt
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-    print(f"Transaction confirmed in block: {receipt.blockNumber}")
-    return receipt
-
-
-def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey, origin_netuid, destination_netuid, amount):
-    """
-    Move stake from one hotkey to another.
-    
-    This moves stake (alpha) between different hotkeys.
-    """
-    contract = get_contract(w3, contract_address)
-    
-    # Convert hotkey strings to bytes32
-    def convert_hotkey(hotkey_str, name):
-        if isinstance(hotkey_str, str):
-            if hotkey_str.startswith('5') and len(hotkey_str) > 40:
-                try:
-                    hotkey_bytes = ss58_to_bytes32(hotkey_str)
-                    print(f"Converted SS58 {name} {hotkey_str} to bytes32: {hotkey_bytes.hex()}")
-                except Exception as e:
-                    raise ValueError(f"Failed to convert SS58 {name}: {e}")
-            elif hotkey_str.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey_str.replace('0x', '')):
-                hotkey_bytes = bytes.fromhex(hotkey_str.replace('0x', ''))
-                if len(hotkey_bytes) != 32:
-                    raise ValueError(f"{name} must be 32 bytes (64 hex characters)")
-            else:
-                raise ValueError(f"{name} must be either SS58 format or 32-byte hex string")
-            return hotkey_bytes
-        return hotkey_str
-    
-    origin_hotkey = convert_hotkey(origin_hotkey, "origin_hotkey")
-    destination_hotkey = convert_hotkey(destination_hotkey, "destination_hotkey")
-    
-    print(f"Moving {amount / 10**9} TAO ({amount} rao) worth of stake")
-    print(f"From hotkey 0x{origin_hotkey.hex()} (netuid {origin_netuid})")
-    print(f"To hotkey 0x{destination_hotkey.hex()} (netuid {destination_netuid})")
-    
-    # Build transaction - XOR encode uint256 parameters
-    tx = contract.functions.moveStake(
-        origin_hotkey,
-        destination_hotkey,
-        xor_encode(origin_netuid),
-        xor_encode(destination_netuid),
-        xor_encode(amount)  # Amount in rao
-    ).build_transaction({
-        'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
-        'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
-    })
-    
-    # Sign and send
-    signed_txn = account.sign_transaction(tx)
-    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-    print(f"MoveStake transaction hash: {tx_hash.hex()}")
-    
-    # Wait for receipt
-    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-    print(f"Transaction confirmed in block: {receipt.blockNumber}")
-    return receipt
 
 
 def main():
