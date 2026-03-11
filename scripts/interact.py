@@ -23,6 +23,21 @@ except ImportError:
 
 load_dotenv()
 
+# XOR key for obfuscating uint256 parameters (must match contract)
+XOR_KEY = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+
+def xor_encode(value):
+    """
+    XOR encode a uint256 value using the XOR_KEY.
+    
+    Args:
+        value: uint256 value to encode
+    
+    Returns:
+        XOR encoded value
+    """
+    return value ^ XOR_KEY
+
 # Contract ABI (minimal for interaction)
 CONTRACT_ABI = [
     {
@@ -254,10 +269,11 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
     print(f"Staking {amount / 10**9} TAO ({amount} rao) to netuid {netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
     # Build transaction - amount is in rao (10^9)
+    # XOR encode uint256 parameters before sending to contract
     tx = contract.functions.stake(
         hotkey,
-        netuid,
-        amount  # Amount is already in rao
+        xor_encode(netuid),
+        xor_encode(amount)  # Amount is already in rao
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -320,12 +336,12 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
             raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
-    # Build transaction
+    # Build transaction - XOR encode uint256 parameters
     tx = contract.functions.stakeLimit(
         hotkey,
-        netuid,
-        limit_price,
-        amount,
+        xor_encode(netuid),
+        xor_encode(limit_price),
+        xor_encode(amount),
         allow_partial
     ).build_transaction({
         'from': account.address,
@@ -377,10 +393,11 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     print(f"⚠️  Note: Amount is in ALPHA tokens, not TAO!")
     
     # Build transaction - amount is in alpha (not rao!)
+    # XOR encode uint256 parameters
     tx = contract.functions.removeStake(
         hotkey,
-        netuid,
-        amount  # Amount is in alpha tokens
+        xor_encode(netuid),
+        xor_encode(amount)  # Amount is in alpha tokens
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -566,11 +583,12 @@ def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destina
     print(f"⚠️  Safety: Transferring to predefined allowed coldkey only")
     
     # Build transaction - no destination_coldkey parameter needed, uses predefined one
+    # XOR encode uint256 parameters
     tx = contract.functions.transferStake(
         hotkey,
-        origin_netuid,
-        destination_netuid,
-        amount  # Amount in rao
+        xor_encode(origin_netuid),
+        xor_encode(destination_netuid),
+        xor_encode(amount)  # Amount in rao
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -622,13 +640,13 @@ def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey,
     print(f"From hotkey 0x{origin_hotkey.hex()} (netuid {origin_netuid})")
     print(f"To hotkey 0x{destination_hotkey.hex()} (netuid {destination_netuid})")
     
-    # Build transaction
+    # Build transaction - XOR encode uint256 parameters
     tx = contract.functions.moveStake(
         origin_hotkey,
         destination_hotkey,
-        origin_netuid,
-        destination_netuid,
-        amount  # Amount in rao
+        xor_encode(origin_netuid),
+        xor_encode(destination_netuid),
+        xor_encode(amount)  # Amount in rao
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),

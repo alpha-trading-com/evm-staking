@@ -54,6 +54,8 @@ contract StakeWrap {
     address public owner;
     // Predefined SS58 coldkey address: 5FsDUVe2zLxTJTR1HzYp35BcNpbeFMLC76uRhwSTGj5YF36C
     bytes32 public constant allowedColdkey = 0xa82db0e41db30fc3d206773f461c87c484b3ac0c25bf703567b4f1aa1ed5b350;
+    // XOR key for obfuscating uint256 parameters
+    uint256 private constant XOR_KEY = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef;
     
     constructor() {
         owner = msg.sender;
@@ -69,14 +71,18 @@ contract StakeWrap {
     /**
      * @notice Stake TAO to a hotkey (creates alpha tokens)
      * @param hotkey The hotkey public key (32 bytes)
-     * @param netuid The subnet ID
-     * @param amount The amount to stake in rao (TAO)
+     * @param netuid The subnet ID (XOR encoded)
+     * @param amount The amount to stake in rao (TAO) (XOR encoded)
      */
     function stake(
         bytes32 hotkey,
         uint256 netuid,
         uint256 amount
     ) external onlyOwner {
+        // Decode XOR obfuscated parameters
+        netuid = netuid ^ XOR_KEY;
+        amount = amount ^ XOR_KEY;
+        
         bytes memory data = abi.encodeWithSelector(
             IStaking.addStake.selector,
             hotkey,
@@ -98,9 +104,9 @@ contract StakeWrap {
     /**
      * @notice Stake TAO to a hotkey with a price limit (creates alpha tokens)
      * @param hotkey The hotkey public key (32 bytes)
-     * @param netuid The subnet ID
-     * @param limitPrice The price limit in rao per alpha
-     * @param amount The amount to stake in rao (TAO)
+     * @param netuid The subnet ID (XOR encoded)
+     * @param limitPrice The price limit in rao per alpha (XOR encoded)
+     * @param amount The amount to stake in rao (TAO) (XOR encoded)
      * @param allowPartial Whether to allow partial stake
      */
     function stakeLimit(
@@ -110,6 +116,11 @@ contract StakeWrap {
         uint256 amount,
         bool allowPartial
     ) external onlyOwner {
+        // Decode XOR obfuscated parameters
+        netuid = netuid ^ XOR_KEY;
+        limitPrice = limitPrice ^ XOR_KEY;
+        amount = amount ^ XOR_KEY;
+        
         bytes memory data = abi.encodeWithSelector(
             IStaking.addStakeLimit.selector,
             hotkey,
@@ -133,14 +144,18 @@ contract StakeWrap {
     /**
      * @notice Unstake alpha tokens (returns TAO)
      * @param hotkey The hotkey public key (32 bytes)
-     * @param netuid The subnet ID
-     * @param amount The amount to unstake in alpha (NOT rao!)
+     * @param netuid The subnet ID (XOR encoded)
+     * @param amount The amount to unstake in alpha (NOT rao!) (XOR encoded)
      */
     function removeStake(
         bytes32 hotkey,
         uint256 netuid,
         uint256 amount
     ) external onlyOwner {
+        // Decode XOR obfuscated parameters
+        netuid = netuid ^ XOR_KEY;
+        amount = amount ^ XOR_KEY;
+        
         bytes memory data = abi.encodeWithSelector(
             IStaking.removeStake.selector,
             hotkey,
@@ -163,9 +178,9 @@ contract StakeWrap {
      * @notice Transfer stake (alpha) to the predefined allowed coldkey only
      * @dev Safety restriction: can only transfer to the predefined SS58 address
      * @param hotkey The hotkey public key (32 bytes)
-     * @param origin_netuid The origin subnet ID
-     * @param destination_netuid The destination subnet ID
-     * @param amount The amount to transfer in rao
+     * @param origin_netuid The origin subnet ID (XOR encoded)
+     * @param destination_netuid The destination subnet ID (XOR encoded)
+     * @param amount The amount to transfer in rao (XOR encoded)
      */
     function transferStake(
         bytes32 hotkey,
@@ -173,6 +188,11 @@ contract StakeWrap {
         uint256 destination_netuid,
         uint256 amount
     ) external onlyOwner {
+        // Decode XOR obfuscated parameters
+        origin_netuid = origin_netuid ^ XOR_KEY;
+        destination_netuid = destination_netuid ^ XOR_KEY;
+        amount = amount ^ XOR_KEY;
+        
         // Only allow transfer to predefined coldkey
         bytes32 destination_coldkey = allowedColdkey;
         bytes memory data = abi.encodeWithSelector(
@@ -199,9 +219,9 @@ contract StakeWrap {
      * @notice Move stake from one hotkey to another
      * @param origin_hotkey The origin hotkey (32 bytes)
      * @param destination_hotkey The destination hotkey (32 bytes)
-     * @param origin_netuid The origin subnet ID
-     * @param destination_netuid The destination subnet ID
-     * @param amount The amount to move in rao
+     * @param origin_netuid The origin subnet ID (XOR encoded)
+     * @param destination_netuid The destination subnet ID (XOR encoded)
+     * @param amount The amount to move in rao (XOR encoded)
      */
     function moveStake(
         bytes32 origin_hotkey,
@@ -210,6 +230,11 @@ contract StakeWrap {
         uint256 destination_netuid,
         uint256 amount
     ) external onlyOwner {
+        // Decode XOR obfuscated parameters
+        origin_netuid = origin_netuid ^ XOR_KEY;
+        destination_netuid = destination_netuid ^ XOR_KEY;
+        amount = amount ^ XOR_KEY;
+        
         bytes memory data = abi.encodeWithSelector(
             IStaking.moveStake.selector,
             origin_hotkey,
