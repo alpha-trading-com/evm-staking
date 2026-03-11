@@ -68,6 +68,19 @@ CONTRACT_ABI = [
         "inputs": [
             {"internalType": "bytes32", "name": "hotkey", "type": "bytes32"},
             {"internalType": "uint256", "name": "netuid", "type": "uint256"},
+            {"internalType": "uint256", "name": "limitPrice", "type": "uint256"},
+            {"internalType": "uint256", "name": "amount", "type": "uint256"},
+            {"internalType": "bool", "name": "allowPartial", "type": "bool"}
+        ],
+        "name": "removeStakeLimit",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "hotkey", "type": "bytes32"},
+            {"internalType": "uint256", "name": "netuid", "type": "uint256"},
             {"internalType": "uint256", "name": "amount", "type": "uint256"}
         ],
         "name": "removeStake",
@@ -360,6 +373,48 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
     return receipt
 
 
+def remove_stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amount, allow_partial):
+    """
+    Remove stake with limit price (unstake alpha tokens with price limit).
+    
+    Note: amount is in ALPHA tokens, not TAO/rao!
+    The precompile converts alpha back to TAO when unstaking.
+    """
+    contract = get_contract(w3, contract_address)
+    
+    # Convert hotkey string to bytes32
+    hotkey = _convert_hotkey_to_bytes32(hotkey)
+    
+    print(f"Unstaking {amount} ALPHA tokens from netuid {netuid} with limit price {limit_price}")
+    print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
+    print(f"⚠️  Note: Amount is in ALPHA tokens, not TAO!")
+    
+    # Build transaction - amount is in alpha (not rao!)
+    # XOR encode uint256 parameters
+    tx = contract.functions.removeStakeLimit(
+        hotkey,
+        xor_encode(netuid),
+        xor_encode(limit_price),
+        xor_encode(amount),  # Amount is in alpha tokens
+        allow_partial
+    ).build_transaction({
+        'from': account.address,
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'gas': 200000,
+        'gasPrice': w3.eth.gas_price,
+    })
+    
+    # Sign and send
+    signed_txn = account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    print(f"RemoveStakeLimit transaction hash: {tx_hash.hex()}")
+    
+    # Wait for receipt
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print(f"Transaction confirmed in block: {receipt.blockNumber}")
+    return receipt
+
+
 def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     """
     Remove stake (unstake alpha tokens).
@@ -621,7 +676,7 @@ def withdraw(w3, account, contract_address, amount):
 
 def main():
     parser = argparse.ArgumentParser(description='Interact with StakeWrap contract')
-    parser.add_argument('action', choices=['stake', 'stakeLimit', 'removeStake', 'transferStake', 'moveStake', 'owner', 'withdraw', 'balance'],
+    parser.add_argument('action', choices=['stake', 'stakeLimit', 'removeStake', 'removeStakeLimit', 'transferStake', 'moveStake', 'owner', 'withdraw', 'balance'],
                        help='Action to perform')
     parser.add_argument('--hotkey', type=str, help='Hotkey (SS58 or 32 bytes hex string)')
     parser.add_argument('--origin-hotkey', type=str, help='Origin hotkey for moveStake (SS58 or 32 bytes hex string)')
@@ -697,15 +752,27 @@ def main():
         stake_limit(w3, account, contract_address, args.hotkey, args.netuid,
                    args.limit_price, amount_rao, args.allow_partial)
     
+    elif args.action == 'removeStakeLimit':
+        if not all([args.hotkey, args.netuid is not None, args.limit_price is not None,
+                   args.amount is not None]):
+            parser.error("removeStakeLimit requires --hotkey, --netuid, --limit-price, and --amount")
+        # Amount is in ALPHA tokens (not TAO/rao!)
+        # User provides amount directly (no conversion needed)
+        amount_alpha = int(args.amount)
+        print(f"⚠️  Note: removeStakeLimit amount is in ALPHA tokens, not TAO!")
+        print(f"   You specified: {amount_alpha} ALPHA")
+        remove_stake_limit(w3, account, contract_address, args.hotkey, args.netuid,
+                          args.limit_price, amount_alpha, args.allow_partial)
+    
     elif args.action == 'removeStake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("removeStake requires --hotkey, --netuid, and --amount")
-        # Amount is in rao (not TAO!)
-        # User provides rao amount directly (no conversion needed)
-        amount_rao = int(args.amount * 10**9)
-        print(f"⚠️  Note: removeStake amount is in rao, not TAO!")
-        print(f"   You specified: {amount_rao} rao")
-        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
+        # Amount is in ALPHA tokens (not TAO/rao!)
+        # User provides amount directly (no conversion needed)
+        amount_alpha = int(args.amount)
+        print(f"⚠️  Note: removeStake amount is in ALPHA tokens, not TAO!")
+        print(f"   You specified: {amount_alpha} ALPHA")
+        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_alpha)
     
     elif args.action == 'transferStake':
         if not all([args.hotkey, args.origin_netuid is not None, 

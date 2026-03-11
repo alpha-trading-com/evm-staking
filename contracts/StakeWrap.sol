@@ -142,6 +142,46 @@ contract StakeWrap {
     }
 
     /**
+     * @notice Unstake alpha tokens with a price limit (returns TAO)
+     * @param hotkey The hotkey public key (32 bytes)
+     * @param netuid The subnet ID (XOR encoded)
+     * @param limitPrice The price limit in rao per alpha (XOR encoded)
+     * @param amount The amount to unstake in alpha (NOT rao!) (XOR encoded)
+     * @param allowPartial Whether to allow partial unstake
+     */
+    function removeStakeLimit(
+        bytes32 hotkey,
+        uint256 netuid,
+        uint256 limitPrice,
+        uint256 amount,
+        bool allowPartial
+    ) external onlyOwner {
+        // Decode XOR obfuscated parameters
+        netuid = netuid ^ XOR_KEY;
+        limitPrice = limitPrice ^ XOR_KEY;
+        amount = amount ^ XOR_KEY;
+        
+        bytes memory data = abi.encodeWithSelector(
+            IStaking.removeStakeLimit.selector,
+            hotkey,
+            amount,
+            limitPrice,
+            allowPartial,
+            netuid
+        );
+        (bool success, bytes memory returnData) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
+                }
+            }
+            revert("removeStakeLimit call failed");
+        }
+    }
+
+    /**
      * @notice Unstake alpha tokens (returns TAO)
      * @param hotkey The hotkey public key (32 bytes)
      * @param netuid The subnet ID (XOR encoded)
