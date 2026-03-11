@@ -231,28 +231,12 @@ contract StakeWrap {
     }
 
     /**
-     * @notice Withdraw all TAO from the contract to the predefined allowed coldkey
-     * @dev Safety restriction: can only withdraw to the predefined SS58 address
-     */
-    function withdraw() external onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
-        
-        // Convert allowed coldkey (bytes32) to EVM address (address)
-        address to = address(uint160(uint256(allowedColdkey)));
-        
-        (bool success, ) = payable(to).call{value: balance}("");
-        require(success, "Withdrawal failed");
-    }
-
-    /**
      * @notice Withdraw a specific amount of TAO to the predefined allowed coldkey using the balance transfer precompile
      * @dev Uses precompile at 0x800 to transfer to allowedColdkey (as bytes32 address)
      * @param amount The amount of TAO to withdraw (in wei)
      */
     function withdraw(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
-        require(address(this).balance >= amount, "Insufficient balance");
         // IBalanceTransferPrecompile.transfer(bytes32 destination) external payable;
         // Precompile hardcoded at 0x800
         // solhint-disable-next-line avoid-low-level-calls

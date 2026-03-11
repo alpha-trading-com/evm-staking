@@ -68,13 +68,6 @@ CONTRACT_ABI = [
         "type": "function"
     },
     {
-        "inputs": [],
-        "name": "withdraw",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
         "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
         "name": "withdraw",
         "outputs": [],
@@ -406,7 +399,7 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     return receipt
 
 
-def withdraw(w3, account, contract_address, amount=None):
+def withdraw(w3, account, contract_address, amount):
     """Withdraw TAO from the contract."""
     # Load full ABI from artifacts to ensure we have the correct function signatures
     artifact_path = 'artifacts/contracts/StakeWrap.sol/StakeWrap.json'
@@ -431,19 +424,9 @@ def withdraw(w3, account, contract_address, amount=None):
     except Exception as e:
         print(f"⚠️  Warning: Could not verify ownership: {e}")
     
-    # Check if withdraw function exists on the deployed contract
-    try:
-        # Try to get the function code - if it doesn't exist, this will help us detect it
-        if amount is None:
-            # Try a static call to see if function exists
-            try:
-                contract.functions.withdraw().call({'from': account.address, 'gas': 100000})
-            except Exception as call_err:
-                if "execution reverted" not in str(call_err).lower():
-                    # If it's not a revert, the function might not exist
-                    pass
-    except:
-        pass
+    # Require amount parameter - withdraw() without parameters is removed
+    if amount is None:
+        raise ValueError("Amount is required. Use: withdraw --amount <TAO>")
     
     # Get the allowed coldkey from the contract to show where funds will go
     try:
@@ -462,34 +445,24 @@ def withdraw(w3, account, contract_address, amount=None):
         print("No funds to withdraw")
         return None
     
-    # Build transaction - use the ABI method first
+    # Build transaction - withdraw(uint256) requires amount parameter
+    # Amount is in wei (10^18) - withdraw function expects wei, unlike other functions which use rao
+    # Balance is already in wei, so compare directly
+    if amount > balance_wei:
+        amount_tao = Web3.from_wei(amount, 'ether')
+        raise ValueError(f"Amount ({amount_tao} TAO = {amount} wei) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
+    amount_tao = Web3.from_wei(amount, 'ether')
+    print(f"⚠️  Withdrawing {amount_tao} TAO ({amount} wei) using balance transfer precompile (0x800)")
+    print(f"   Transferring to allowed coldkey via precompile")
+    print(f"   Note: Withdraw uses wei (10^18), unlike other functions which use rao (10^9)")
+    
     try:
-        if amount is None:
-            # Withdraw all - call withdraw() with no parameters (uses EVM address conversion)
-            print(f"⚠️  Withdrawing all TAO using EVM address conversion")
-            tx = contract.functions.withdraw().build_transaction({
-                'from': account.address,
-                'nonce': w3.eth.get_transaction_count(account.address),
-                'gas': 100000,
-                'gasPrice': w3.eth.gas_price,
-            })
-        else:
-            # Withdraw specific amount - call withdraw(uint256) with one parameter
-            # Amount is in rao (10^9) - the precompile expects rao
-            # Convert rao to wei for balance comparison (1 TAO = 10^18 wei = 10^9 rao)
-            amount_wei = amount * 10**9  # Convert rao to wei for comparison
-            if amount_wei > balance_wei:
-                amount_tao = amount / 10**9  # Convert rao to TAO for display
-                raise ValueError(f"Amount ({amount_tao} TAO = {amount} rao) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
-            amount_tao = amount / 10**9  # Convert rao to TAO for display
-            print(f"⚠️  Withdrawing {amount_tao} TAO ({amount} rao) using balance transfer precompile (0x800)")
-            print(f"   Transferring to allowed coldkey via precompile")
-            tx = contract.functions.withdraw(amount).build_transaction({
-                'from': account.address,
-                'nonce': w3.eth.get_transaction_count(account.address),
-                'gas': 150000,  # Increased gas for precompile call
-                'gasPrice': w3.eth.gas_price,
-            })
+        tx = contract.functions.withdraw(amount).build_transaction({
+            'from': account.address,
+            'nonce': w3.eth.get_transaction_count(account.address),
+            'gas': 150000,  # Increased gas for precompile call
+            'gasPrice': w3.eth.gas_price,
+        })
     except Exception as e:
         error_str = str(e)
         if "was not found" in error_str or "not found" in error_str.lower():
@@ -501,15 +474,10 @@ def withdraw(w3, account, contract_address, amount=None):
         print(f"Error building transaction: {e}")
         print("Trying alternative method using function selector...")
         # Fallback: use function selector directly
-        if amount is None:
-            # withdraw() function selector: keccak256("withdraw()")[:4]
-            func_selector = keccak(b"withdraw()")[:4]
-            data = to_hex(func_selector)
-        else:
-            # withdraw(uint256) function selector: keccak256("withdraw(uint256)")[:4]
-            func_selector = keccak(b"withdraw(uint256)")[:4]
-            encoded_params = encode(['uint256'], [amount])
-            data = to_hex(func_selector + encoded_params)
+        # withdraw(uint256) function selector: keccak256("withdraw(uint256)")[:4]
+        func_selector = keccak(b"withdraw(uint256)")[:4]
+        encoded_params = encode(['uint256'], [amount])
+        data = to_hex(func_selector + encoded_params)
         
         tx = {
             'to': contract_address,
@@ -535,10 +503,7 @@ def withdraw(w3, account, contract_address, amount=None):
         # Try to get revert reason
         try:
             # Try to call the function to see the revert reason
-            if amount is None:
-                contract.functions.withdraw().call({'from': account.address})
-            else:
-                contract.functions.withdraw(amount).call({'from': account.address})
+            contract.functions.withdraw(amount).call({'from': account.address})
         except Exception as revert_error:
             error_msg = str(revert_error)
             if "execution reverted" in error_msg:
@@ -789,10 +754,13 @@ def main():
                   args.origin_netuid, args.destination_netuid, amount_rao)
     
     elif args.action == 'withdraw':
-        # Withdraw amount should be in rao (10^9) - the precompile expects rao
-        # If amount is provided, convert TAO to rao; otherwise withdraw all
-        amount_rao = int(args.amount * 10**9) if args.amount is not None else None
-        withdraw(w3, account, contract_address, amount_rao)
+        if args.amount is None:
+            parser.error("withdraw requires --amount")
+        # Withdraw amount should be in wei (10^18) - withdraw function expects wei
+        # Unlike other functions (stake, transferStake, moveStake) which use rao (10^9)
+        # Convert TAO to wei
+        amount_wei = int(args.amount * 10**18)
+        withdraw(w3, account, contract_address, amount_wei)
 
 if __name__ == '__main__':
     main()
