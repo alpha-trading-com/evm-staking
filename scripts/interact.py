@@ -196,6 +196,20 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
     """Stake tokens."""
     contract = get_contract(w3, contract_address)
     
+    # Check contract balance - the precompile checks the contract's balance
+    contract_balance = w3.eth.get_balance(contract_address)
+    print(f"Contract balance: {Web3.from_wei(contract_balance, 'ether')} TAO ({contract_balance} rao)")
+    print(f"Staking amount: {Web3.from_wei(amount, 'ether')} TAO ({amount} rao)")
+    
+    if contract_balance < amount:
+        print(f"\n❌ ERROR: Contract balance ({Web3.from_wei(contract_balance, 'ether')} TAO) is insufficient!")
+        print(f"   The precompile checks the contract's TAO balance, not your account balance.")
+        print(f"   You need to send {Web3.from_wei(amount, 'ether')} TAO to the contract first.")
+        print(f"\n   To send TAO to the contract, use:")
+        print(f"   Send {Web3.from_wei(amount, 'ether')} TAO to: {contract_address}")
+        print(f"   Or use a wallet/exchange to send TAO to this address.")
+        raise ValueError(f"Insufficient contract balance: need {amount} rao, have {contract_balance} rao")
+    
     # Convert hotkey string to bytes32
     if isinstance(hotkey, str):
         # Check if it's SS58 format (starts with 5 and is base58)
@@ -214,11 +228,14 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
             raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
+    print(f"Staking {Web3.from_wei(amount, 'ether')} TAO to netuid {netuid}")
+    print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
+    print(amount)
     # Build transaction
     tx = contract.functions.stake(
         hotkey,
         netuid,
-        amount
+        int(amount / 1e9)
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -332,7 +349,7 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     tx = contract.functions.removeStake(
         hotkey,
         netuid,
-        amount
+        int(amount / 1e9)
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
