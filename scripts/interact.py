@@ -90,6 +90,32 @@ CONTRACT_ABI = [
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "destination_coldkey", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "hotkey", "type": "bytes32"},
+            {"internalType": "uint256", "name": "origin_netuid", "type": "uint256"},
+            {"internalType": "uint256", "name": "destination_netuid", "type": "uint256"},
+            {"internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "name": "transferStake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {"internalType": "bytes32", "name": "origin_hotkey", "type": "bytes32"},
+            {"internalType": "bytes32", "name": "destination_hotkey", "type": "bytes32"},
+            {"internalType": "uint256", "name": "origin_netuid", "type": "uint256"},
+            {"internalType": "uint256", "name": "destination_netuid", "type": "uint256"},
+            {"internalType": "uint256", "name": "amount", "type": "uint256"}
+        ],
+        "name": "moveStake",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
 ]
 
@@ -230,12 +256,11 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
     
     print(f"Staking {Web3.from_wei(amount, 'ether')} TAO to netuid {netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
-    print(amount)
-    # Build transaction
+    # Build transaction - amount is already in rao
     tx = contract.functions.stake(
         hotkey,
         netuid,
-        int(amount / 1e9)
+        amount  # Amount is already in rao
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -324,7 +349,12 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
 
 
 def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
-    """Remove stake."""
+    """
+    Remove stake (unstake alpha tokens).
+    
+    Note: amount is in ALPHA tokens, not TAO/rao!
+    The precompile converts alpha back to TAO when unstaking.
+    """
     contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
@@ -345,11 +375,15 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
             raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
-    # Build transaction
+    print(f"Unstaking {amount} ALPHA tokens from netuid {netuid}")
+    print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
+    print(f"⚠️  Note: Amount is in ALPHA tokens, not TAO!")
+    
+    # Build transaction - amount is in alpha (not rao!)
     tx = contract.functions.removeStake(
         hotkey,
         netuid,
-        int(amount / 1e9)
+        amount  # Amount is in alpha tokens
     ).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -428,7 +462,7 @@ def withdraw(w3, account, contract_address, amount=None):
         else:
             # Withdraw specific amount - call withdraw(uint256) with one parameter
             if amount > balance:
-                raise ValueError(f"Amount ({amount} wei) exceeds contract balance ({balance} wei)")
+                raise ValueError(f"Amount ({amount} rao) exceeds contract balance ({balance} rao)")
             tx = contract.functions.withdraw(amount).build_transaction({
                 'from': account.address,
                 'nonce': w3.eth.get_transaction_count(account.address),
@@ -515,7 +549,7 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO")
     
     if amount > balance:
-        raise ValueError(f"Amount ({amount} wei) exceeds contract balance ({balance} wei)")
+        raise ValueError(f"Amount ({amount} rao) exceeds contract balance ({balance} rao)")
     
     # Validate recipient address
     to_address = Web3.to_checksum_address(to_address)
@@ -540,13 +574,145 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     return receipt
 
 
+def transfer_stake(w3, account, contract_address, destination_coldkey, hotkey, origin_netuid, destination_netuid, amount):
+    """
+    Transfer stake (alpha) to another coldkey.
+    
+    This allows transferring alpha tokens to another account's coldkey.
+    """
+    contract = get_contract(w3, contract_address)
+    
+    # Convert hotkey and coldkey strings to bytes32
+    if isinstance(hotkey, str):
+        if hotkey.startswith('5') and len(hotkey) > 40:
+            try:
+                hotkey_bytes = ss58_to_bytes32(hotkey)
+                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
+            except Exception as e:
+                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
+        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
+            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
+            if len(hotkey_bytes) != 32:
+                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        else:
+            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
+        hotkey = hotkey_bytes
+    
+    if isinstance(destination_coldkey, str):
+        if destination_coldkey.startswith('5') and len(destination_coldkey) > 40:
+            try:
+                coldkey_bytes = ss58_to_bytes32(destination_coldkey)
+                print(f"Converted SS58 coldkey {destination_coldkey} to bytes32: {coldkey_bytes.hex()}")
+            except Exception as e:
+                raise ValueError(f"Failed to convert SS58 coldkey: {e}")
+        elif destination_coldkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in destination_coldkey.replace('0x', '')):
+            coldkey_bytes = bytes.fromhex(destination_coldkey.replace('0x', ''))
+            if len(coldkey_bytes) != 32:
+                raise ValueError("Coldkey must be 32 bytes (64 hex characters)")
+        else:
+            raise ValueError("Coldkey must be either SS58 format or 32-byte hex string")
+        destination_coldkey = coldkey_bytes
+    
+    print(f"Transferring {Web3.from_wei(amount, 'ether')} TAO worth of stake (alpha)")
+    print(f"From netuid {origin_netuid} to netuid {destination_netuid}")
+    print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
+    print(f"Destination coldkey (bytes32): 0x{destination_coldkey.hex()}")
+    
+    # Build transaction
+    tx = contract.functions.transferStake(
+        destination_coldkey,
+        hotkey,
+        origin_netuid,
+        destination_netuid,
+        amount  # Amount in rao
+    ).build_transaction({
+        'from': account.address,
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'gas': 200000,
+        'gasPrice': w3.eth.gas_price,
+    })
+    
+    # Sign and send
+    signed_txn = account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    print(f"TransferStake transaction hash: {tx_hash.hex()}")
+    
+    # Wait for receipt
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print(f"Transaction confirmed in block: {receipt.blockNumber}")
+    return receipt
+
+
+def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey, origin_netuid, destination_netuid, amount):
+    """
+    Move stake from one hotkey to another.
+    
+    This moves stake (alpha) between different hotkeys.
+    """
+    contract = get_contract(w3, contract_address)
+    
+    # Convert hotkey strings to bytes32
+    def convert_hotkey(hotkey_str, name):
+        if isinstance(hotkey_str, str):
+            if hotkey_str.startswith('5') and len(hotkey_str) > 40:
+                try:
+                    hotkey_bytes = ss58_to_bytes32(hotkey_str)
+                    print(f"Converted SS58 {name} {hotkey_str} to bytes32: {hotkey_bytes.hex()}")
+                except Exception as e:
+                    raise ValueError(f"Failed to convert SS58 {name}: {e}")
+            elif hotkey_str.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey_str.replace('0x', '')):
+                hotkey_bytes = bytes.fromhex(hotkey_str.replace('0x', ''))
+                if len(hotkey_bytes) != 32:
+                    raise ValueError(f"{name} must be 32 bytes (64 hex characters)")
+            else:
+                raise ValueError(f"{name} must be either SS58 format or 32-byte hex string")
+            return hotkey_bytes
+        return hotkey_str
+    
+    origin_hotkey = convert_hotkey(origin_hotkey, "origin_hotkey")
+    destination_hotkey = convert_hotkey(destination_hotkey, "destination_hotkey")
+    
+    print(f"Moving {Web3.from_wei(amount, 'ether')} TAO worth of stake")
+    print(f"From hotkey 0x{origin_hotkey.hex()} (netuid {origin_netuid})")
+    print(f"To hotkey 0x{destination_hotkey.hex()} (netuid {destination_netuid})")
+    
+    # Build transaction
+    tx = contract.functions.moveStake(
+        origin_hotkey,
+        destination_hotkey,
+        origin_netuid,
+        destination_netuid,
+        amount  # Amount in rao
+    ).build_transaction({
+        'from': account.address,
+        'nonce': w3.eth.get_transaction_count(account.address),
+        'gas': 200000,
+        'gasPrice': w3.eth.gas_price,
+    })
+    
+    # Sign and send
+    signed_txn = account.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+    print(f"MoveStake transaction hash: {tx_hash.hex()}")
+    
+    # Wait for receipt
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    print(f"Transaction confirmed in block: {receipt.blockNumber}")
+    return receipt
+
+
 def main():
     parser = argparse.ArgumentParser(description='Interact with StakeWrap contract')
-    parser.add_argument('action', choices=['stake', 'stakeLimit', 'removeStake', 'owner', 'withdraw', 'withdrawTo', 'balance'],
+    parser.add_argument('action', choices=['stake', 'stakeLimit', 'removeStake', 'transferStake', 'moveStake', 'owner', 'withdraw', 'withdrawTo', 'balance'],
                        help='Action to perform')
-    parser.add_argument('--hotkey', type=str, help='Hotkey (32 bytes hex string)')
+    parser.add_argument('--hotkey', type=str, help='Hotkey (SS58 or 32 bytes hex string)')
+    parser.add_argument('--origin-hotkey', type=str, help='Origin hotkey for moveStake (SS58 or 32 bytes hex string)')
+    parser.add_argument('--destination-hotkey', type=str, help='Destination hotkey for moveStake (SS58 or 32 bytes hex string)')
+    parser.add_argument('--destination-coldkey', type=str, help='Destination coldkey for transferStake (SS58 or 32 bytes hex string)')
     parser.add_argument('--netuid', type=int, help='Network UID')
-    parser.add_argument('--amount', type=float, help='Amount to stake/unstake/withdraw (in TAO)')
+    parser.add_argument('--origin-netuid', type=int, help='Origin netuid for transferStake/moveStake')
+    parser.add_argument('--destination-netuid', type=int, help='Destination netuid for transferStake/moveStake')
+    parser.add_argument('--amount', type=float, help='Amount: TAO for stake/transferStake/moveStake, ALPHA for removeStake, TAO for withdraw')
     parser.add_argument('--limit-price', type=int, dest='limit_price',
                        help='Limit price for stakeLimit')
     parser.add_argument('--allow-partial', action='store_true',
@@ -616,9 +782,30 @@ def main():
     elif args.action == 'removeStake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("removeStake requires --hotkey, --netuid, and --amount")
+        # Amount is in ALPHA tokens (not TAO!)
+        # User provides alpha amount directly (no conversion needed)
+        amount_alpha = int(args.amount)
+        print(f"⚠️  Note: removeStake amount is in ALPHA tokens, not TAO!")
+        print(f"   You specified: {amount_alpha} ALPHA")
+        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_alpha)
+    
+    elif args.action == 'transferStake':
+        if not all([args.destination_coldkey, args.hotkey, args.origin_netuid is not None, 
+                   args.destination_netuid is not None, args.amount is not None]):
+            parser.error("transferStake requires --destination-coldkey, --hotkey, --origin-netuid, --destination-netuid, and --amount")
         # Convert TAO to rao
         amount_rao = int(args.amount * 10**18)
-        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
+        transfer_stake(w3, account, contract_address, args.destination_coldkey, args.hotkey,
+                       args.origin_netuid, args.destination_netuid, amount_rao)
+    
+    elif args.action == 'moveStake':
+        if not all([args.origin_hotkey, args.destination_hotkey, args.origin_netuid is not None,
+                   args.destination_netuid is not None, args.amount is not None]):
+            parser.error("moveStake requires --origin-hotkey, --destination-hotkey, --origin-netuid, --destination-netuid, and --amount")
+        # Convert TAO to rao
+        amount_rao = int(args.amount * 10**18)
+        move_stake(w3, account, contract_address, args.origin_hotkey, args.destination_hotkey,
+                  args.origin_netuid, args.destination_netuid, amount_rao)
     
     elif args.action == 'withdraw':
         # Convert TAO to rao if amount is provided

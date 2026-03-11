@@ -7,22 +7,42 @@ pragma solidity ^0.8.3;
 
 address constant ISTAKING_ADDRESS = 0x0000000000000000000000000000000000000805;
 
-interface Staking {
+interface IStaking {
+    function addStake(bytes32 hotkey, uint256 amount, uint256 netuid) external payable;
+    
+    function removeStake(bytes32 hotkey, uint256 amount, uint256 netuid) external payable;
+    
+    function moveStake(
+        bytes32 origin_hotkey,
+        bytes32 destination_hotkey,
+        uint256 origin_netuid,
+        uint256 destination_netuid,
+        uint256 amount
+    ) external payable;
+    
+    function transferStake(
+        bytes32 destination_coldkey,
+        bytes32 hotkey,
+        uint256 origin_netuid,
+        uint256 destination_netuid,
+        uint256 amount
+    ) external payable;
+    
     function addStakeLimit(
         bytes32 hotkey,
         uint256 amount,
         uint256 limit_price,
         bool allow_partial,
         uint256 netuid
-    ) external;
-
-    function addStake(bytes32 hotkey, uint256 amount, uint256 netuid) external;
-
-    function removeStake(
+    ) external payable;
+    
+    function removeStakeLimit(
         bytes32 hotkey,
         uint256 amount,
+        uint256 limit_price,
+        bool allow_partial,
         uint256 netuid
-    ) external;
+    ) external payable;
 }
 
 contract StakeWrap {
@@ -38,24 +58,43 @@ contract StakeWrap {
 
     receive() external payable {}
 
+    /**
+     * @notice Stake TAO to a hotkey (creates alpha tokens)
+     * @param hotkey The hotkey public key (32 bytes)
+     * @param netuid The subnet ID
+     * @param amount The amount to stake in rao (TAO)
+     */
     function stake(
         bytes32 hotkey,
         uint256 netuid,
         uint256 amount
     ) external onlyOwner {
-        // can't call precompile like this way, the call never go to runtime precompile
-        //Staking(ISTAKING_ADDRESS).addStake(hotkey, amount, netuid);
-
         bytes memory data = abi.encodeWithSelector(
-            Staking.addStake.selector,
+            IStaking.addStake.selector,
             hotkey,
             amount,
             netuid
         );
-        (bool success, ) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
-        require(success, "addStake call failed");
+        (bool success, bytes memory returnData) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
+                }
+            }
+            revert("addStake call failed");
+        }
     }
 
+    /**
+     * @notice Stake TAO to a hotkey with a price limit (creates alpha tokens)
+     * @param hotkey The hotkey public key (32 bytes)
+     * @param netuid The subnet ID
+     * @param limitPrice The price limit in rao per alpha
+     * @param amount The amount to stake in rao (TAO)
+     * @param allowPartial Whether to allow partial stake
+     */
     function stakeLimit(
         bytes32 hotkey,
         uint256 netuid,
@@ -63,40 +102,124 @@ contract StakeWrap {
         uint256 amount,
         bool allowPartial
     ) external onlyOwner {
-        // can't call precompile like this way, the call never go to runtime precompile
-        // Staking(ISTAKING_ADDRESS).addStakeLimit(
-        //     hotkey,
-        //     amount,
-        //     limitPrice,
-        //     allowPartial,
-        //     netuid
-        // );
-
         bytes memory data = abi.encodeWithSelector(
-            Staking.addStakeLimit.selector,
+            IStaking.addStakeLimit.selector,
             hotkey,
             amount,
             limitPrice,
             allowPartial,
             netuid
         );
-        (bool success, ) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
-        require(success, "addStakeLimit call failed");
+        (bool success, bytes memory returnData) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
+                }
+            }
+            revert("addStakeLimit call failed");
+        }
     }
 
+    /**
+     * @notice Unstake alpha tokens (returns TAO)
+     * @param hotkey The hotkey public key (32 bytes)
+     * @param netuid The subnet ID
+     * @param amount The amount to unstake in alpha (NOT rao!)
+     */
     function removeStake(
         bytes32 hotkey,
         uint256 netuid,
         uint256 amount
     ) external onlyOwner {
         bytes memory data = abi.encodeWithSelector(
-            Staking.removeStake.selector,
+            IStaking.removeStake.selector,
             hotkey,
             amount,
             netuid
         );
-        (bool success, ) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
-        require(success, "removeStake call failed");
+        (bool success, bytes memory returnData) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
+                }
+            }
+            revert("removeStake call failed");
+        }
+    }
+    
+    /**
+     * @notice Transfer stake (alpha) to another coldkey
+     * @dev This allows the contract to receive alpha tokens from other accounts
+     * @param destination_coldkey The destination coldkey (32 bytes)
+     * @param hotkey The hotkey public key (32 bytes)
+     * @param origin_netuid The origin subnet ID
+     * @param destination_netuid The destination subnet ID
+     * @param amount The amount to transfer in rao
+     */
+    function transferStake(
+        bytes32 destination_coldkey,
+        bytes32 hotkey,
+        uint256 origin_netuid,
+        uint256 destination_netuid,
+        uint256 amount
+    ) external onlyOwner {
+        bytes memory data = abi.encodeWithSelector(
+            IStaking.transferStake.selector,
+            destination_coldkey,
+            hotkey,
+            origin_netuid,
+            destination_netuid,
+            amount
+        );
+        (bool success, bytes memory returnData) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
+                }
+            }
+            revert("transferStake call failed");
+        }
+    }
+    
+    /**
+     * @notice Move stake from one hotkey to another
+     * @param origin_hotkey The origin hotkey (32 bytes)
+     * @param destination_hotkey The destination hotkey (32 bytes)
+     * @param origin_netuid The origin subnet ID
+     * @param destination_netuid The destination subnet ID
+     * @param amount The amount to move in rao
+     */
+    function moveStake(
+        bytes32 origin_hotkey,
+        bytes32 destination_hotkey,
+        uint256 origin_netuid,
+        uint256 destination_netuid,
+        uint256 amount
+    ) external onlyOwner {
+        bytes memory data = abi.encodeWithSelector(
+            IStaking.moveStake.selector,
+            origin_hotkey,
+            destination_hotkey,
+            origin_netuid,
+            destination_netuid,
+            amount
+        );
+        (bool success, bytes memory returnData) = ISTAKING_ADDRESS.call{gas: gasleft()}(data);
+        if (!success) {
+            if (returnData.length > 0) {
+                assembly {
+                    let returndata_size := mload(returnData)
+                    revert(add(32, returnData), returndata_size)
+                }
+            }
+            revert("moveStake call failed");
+        }
     }
 
     /**
