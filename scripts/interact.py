@@ -223,18 +223,26 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
     contract = get_contract(w3, contract_address)
     
     # Check contract balance - the precompile checks the contract's balance
-    contract_balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance: {Web3.from_wei(contract_balance, 'ether')} TAO ({contract_balance} rao)")
-    print(f"Staking amount: {Web3.from_wei(amount, 'ether')} TAO ({amount} rao)")
+    # Balance from blockchain is in wei (10^18)
+    contract_balance_wei = w3.eth.get_balance(contract_address)
+    contract_balance_tao = Web3.from_wei(contract_balance_wei, 'ether')
     
-    if contract_balance < amount:
-        print(f"\n❌ ERROR: Contract balance ({Web3.from_wei(contract_balance, 'ether')} TAO) is insufficient!")
+    # Amount is in rao (10^9), convert to TAO for display
+    amount_tao = amount / 10**9
+    
+    print(f"Contract balance: {contract_balance_tao} TAO ({contract_balance_wei} wei)")
+    print(f"Staking amount: {amount_tao} TAO ({amount} rao)")
+    
+    # Convert amount from rao to wei for comparison (1 TAO = 10^18 wei = 10^9 rao)
+    amount_wei = amount * 10**9
+    if contract_balance_wei < amount_wei:
+        print(f"\n❌ ERROR: Contract balance ({contract_balance_tao} TAO) is insufficient!")
         print(f"   The precompile checks the contract's TAO balance, not your account balance.")
-        print(f"   You need to send {Web3.from_wei(amount, 'ether')} TAO to the contract first.")
+        print(f"   You need to send {amount_tao} TAO to the contract first.")
         print(f"\n   To send TAO to the contract, use:")
-        print(f"   Send {Web3.from_wei(amount, 'ether')} TAO to: {contract_address}")
+        print(f"   Send {amount_tao} TAO to: {contract_address}")
         print(f"   Or use a wallet/exchange to send TAO to this address.")
-        raise ValueError(f"Insufficient contract balance: need {amount} rao, have {contract_balance} rao")
+        raise ValueError(f"Insufficient contract balance: need {amount} rao ({amount_tao} TAO), have {contract_balance_wei} wei ({contract_balance_tao} TAO)")
     
     # Convert hotkey string to bytes32
     if isinstance(hotkey, str):
@@ -254,9 +262,9 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
             raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
-    print(f"Staking {Web3.from_wei(amount, 'ether')} TAO to netuid {netuid}")
+    print(f"Staking {amount / 10**9} TAO ({amount} rao) to netuid {netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
-    # Build transaction - amount is already in rao
+    # Build transaction - amount is in rao (10^9)
     tx = contract.functions.stake(
         hotkey,
         netuid,
@@ -441,11 +449,12 @@ def withdraw(w3, account, contract_address, amount=None):
     except:
         pass
     
-    # Check contract balance
-    balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO ({balance} rao)")
+    # Check contract balance - balance is in wei (10^18)
+    balance_wei = w3.eth.get_balance(contract_address)
+    balance_tao = Web3.from_wei(balance_wei, 'ether')
+    print(f"Contract balance: {balance_tao} TAO ({balance_wei} wei)")
     
-    if balance == 0:
+    if balance_wei == 0:
         print("No funds to withdraw")
         return None
     
@@ -461,8 +470,10 @@ def withdraw(w3, account, contract_address, amount=None):
             })
         else:
             # Withdraw specific amount - call withdraw(uint256) with one parameter
-            if amount > balance:
-                raise ValueError(f"Amount ({amount} rao) exceeds contract balance ({balance} rao)")
+            # Amount is in wei (10^18) since it's a balance withdrawal
+            if amount > balance_wei:
+                amount_tao = Web3.from_wei(amount, 'ether')
+                raise ValueError(f"Amount ({amount_tao} TAO = {amount} wei) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
             tx = contract.functions.withdraw(amount).build_transaction({
                 'from': account.address,
                 'nonce': w3.eth.get_transaction_count(account.address),
@@ -534,8 +545,9 @@ def withdraw(w3, account, contract_address, amount=None):
         return receipt
     
     # Check final balance
-    final_balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance after withdrawal: {Web3.from_wei(final_balance, 'ether')} TAO ({final_balance} rao)")
+    final_balance_wei = w3.eth.get_balance(contract_address)
+    final_balance_tao = Web3.from_wei(final_balance_wei, 'ether')
+    print(f"Contract balance after withdrawal: {final_balance_tao} TAO ({final_balance_wei} wei)")
     
     return receipt
 
@@ -544,17 +556,20 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     """Withdraw TAO from the contract to a specific address."""
     contract = get_contract(w3, contract_address)
     
-    # Check contract balance
-    balance = w3.eth.get_balance(contract_address)
-    print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO")
+    # Check contract balance - balance is in wei (10^18)
+    balance_wei = w3.eth.get_balance(contract_address)
+    balance_tao = Web3.from_wei(balance_wei, 'ether')
+    print(f"Contract balance: {balance_tao} TAO ({balance_wei} wei)")
     
-    if amount > balance:
-        raise ValueError(f"Amount ({amount} rao) exceeds contract balance ({balance} rao)")
+    # Amount is in wei (10^18) since it's a balance withdrawal
+    amount_tao = Web3.from_wei(amount, 'ether')
+    if amount > balance_wei:
+        raise ValueError(f"Amount ({amount_tao} TAO = {amount} wei) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
     
     # Validate recipient address
     to_address = Web3.to_checksum_address(to_address)
     
-    # Build transaction
+    # Build transaction - amount is in wei
     tx = contract.functions.withdrawTo(to_address, amount).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
@@ -566,7 +581,7 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     signed_txn = account.sign_transaction(tx)
     tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
     print(f"WithdrawTo transaction hash: {tx_hash.hex()}")
-    print(f"Withdrawing {Web3.from_wei(amount, 'ether')} TAO to {to_address}")
+    print(f"Withdrawing {amount_tao} TAO ({amount} wei) to {to_address}")
     
     # Wait for receipt
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -613,7 +628,7 @@ def transfer_stake(w3, account, contract_address, destination_coldkey, hotkey, o
             raise ValueError("Coldkey must be either SS58 format or 32-byte hex string")
         destination_coldkey = coldkey_bytes
     
-    print(f"Transferring {Web3.from_wei(amount, 'ether')} TAO worth of stake (alpha)")
+    print(f"Transferring {amount / 10**9} TAO ({amount} rao) worth of stake (alpha)")
     print(f"From netuid {origin_netuid} to netuid {destination_netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
     print(f"Destination coldkey (bytes32): 0x{destination_coldkey.hex()}")
@@ -672,7 +687,7 @@ def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey,
     origin_hotkey = convert_hotkey(origin_hotkey, "origin_hotkey")
     destination_hotkey = convert_hotkey(destination_hotkey, "destination_hotkey")
     
-    print(f"Moving {Web3.from_wei(amount, 'ether')} TAO worth of stake")
+    print(f"Moving {amount / 10**9} TAO ({amount} rao) worth of stake")
     print(f"From hotkey 0x{origin_hotkey.hex()} (netuid {origin_netuid})")
     print(f"To hotkey 0x{destination_hotkey.hex()} (netuid {destination_netuid})")
     
@@ -760,41 +775,43 @@ def main():
             print("   You need to use the owner's private key to withdraw")
     
     elif args.action == 'balance':
-        balance = w3.eth.get_balance(contract_address)
-        print(f"Contract balance: {Web3.from_wei(balance, 'ether')} TAO ({balance} rao)")
+        balance_wei = w3.eth.get_balance(contract_address)  # Balance is in wei (10^18)
+        balance_tao = Web3.from_wei(balance_wei, 'ether')
+        print(f"Contract balance: {balance_tao} TAO ({balance_wei} wei)")
+        print(f"Note: Balance is in wei (10^18). Staking/unstaking amounts use rao (10^9).")
     
     elif args.action == 'stake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("stake requires --hotkey, --netuid, and --amount")
-        # Convert TAO to rao
-        amount_rao = int(args.amount * 10**18)
+        # Convert TAO to rao (1 TAO = 10^9 rao)
+        amount_rao = int(args.amount * 10**9)
         stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
     
     elif args.action == 'stakeLimit':
         if not all([args.hotkey, args.netuid is not None, args.limit_price is not None,
                    args.amount is not None]):
             parser.error("stakeLimit requires --hotkey, --netuid, --limit-price, and --amount")
-        # Convert TAO to rao
-        amount_rao = int(args.amount * 10**18)
+        # Convert TAO to rao (1 TAO = 10^9 rao)
+        amount_rao = int(args.amount * 10**9)
         stake_limit(w3, account, contract_address, args.hotkey, args.netuid,
                    args.limit_price, amount_rao, args.allow_partial)
     
     elif args.action == 'removeStake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("removeStake requires --hotkey, --netuid, and --amount")
-        # Amount is in ALPHA tokens (not TAO!)
-        # User provides alpha amount directly (no conversion needed)
-        amount_alpha = int(args.amount)
-        print(f"⚠️  Note: removeStake amount is in ALPHA tokens, not TAO!")
-        print(f"   You specified: {amount_alpha} ALPHA")
-        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_alpha)
+        # Amount is in rao (not TAO!)
+        # User provides rao amount directly (no conversion needed)
+        amount_rao = int(args.amount * 10**9)
+        print(f"⚠️  Note: removeStake amount is in rao, not TAO!")
+        print(f"   You specified: {amount_rao} rao")
+        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
     
     elif args.action == 'transferStake':
         if not all([args.destination_coldkey, args.hotkey, args.origin_netuid is not None, 
                    args.destination_netuid is not None, args.amount is not None]):
             parser.error("transferStake requires --destination-coldkey, --hotkey, --origin-netuid, --destination-netuid, and --amount")
-        # Convert TAO to rao
-        amount_rao = int(args.amount * 10**18)
+        # Convert TAO to rao (1 TAO = 10^9 rao)
+        amount_rao = int(args.amount * 10**9)
         transfer_stake(w3, account, contract_address, args.destination_coldkey, args.hotkey,
                        args.origin_netuid, args.destination_netuid, amount_rao)
     
@@ -802,22 +819,23 @@ def main():
         if not all([args.origin_hotkey, args.destination_hotkey, args.origin_netuid is not None,
                    args.destination_netuid is not None, args.amount is not None]):
             parser.error("moveStake requires --origin-hotkey, --destination-hotkey, --origin-netuid, --destination-netuid, and --amount")
-        # Convert TAO to rao
-        amount_rao = int(args.amount * 10**18)
+        # Convert TAO to rao (1 TAO = 10^9 rao)
+        amount_rao = int(args.amount * 10**9)
         move_stake(w3, account, contract_address, args.origin_hotkey, args.destination_hotkey,
                   args.origin_netuid, args.destination_netuid, amount_rao)
     
     elif args.action == 'withdraw':
-        # Convert TAO to rao if amount is provided
-        amount_rao = int(args.amount * 10**18) if args.amount is not None else None
-        withdraw(w3, account, contract_address, amount_rao)
+        # Withdraw amount should be in wei (10^18) since it's a balance withdrawal
+        # But the contract expects wei, so convert TAO to wei
+        amount_wei = int(args.amount * 10**18) if args.amount is not None else None
+        withdraw(w3, account, contract_address, amount_wei)
     
     elif args.action == 'withdrawTo':
         if not all([args.to, args.amount is not None]):
             parser.error("withdrawTo requires --to and --amount")
-        # Convert TAO to rao
-        amount_rao = int(args.amount * 10**18)
-        withdraw_to(w3, account, contract_address, args.to, amount_rao)
+        # Withdraw amount should be in wei (10^18) since it's a balance withdrawal
+        amount_wei = int(args.amount * 10**18)
+        withdraw_to(w3, account, contract_address, args.to, amount_wei)
 
 
 if __name__ == '__main__':
