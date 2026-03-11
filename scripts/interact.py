@@ -6,11 +6,20 @@ Interact with the deployed StakeWrap contract.
 import os
 import json
 import argparse
+import base58
+import hashlib
 from web3 import Web3
 from eth_account import Account
 from eth_abi import encode
 from eth_utils import keccak, to_hex
 from dotenv import load_dotenv
+
+# Try to import bittensor for proper SS58 decoding
+try:
+    import bittensor as bt
+    BT_AVAILABLE = True
+except ImportError:
+    BT_AVAILABLE = False
 
 load_dotenv()
 
@@ -113,15 +122,96 @@ def get_contract(w3, contract_address, abi=None):
     return w3.eth.contract(address=contract_address, abi=abi)
 
 
+def ss58_to_bytes32(ss58_address):
+    """
+    Convert SS58 address to bytes32.
+    
+    Args:
+        ss58_address: SS58 encoded address string
+    
+    Returns:
+        bytes32 representation of the address
+    """
+    try:
+        # Use bittensor library if available for proper decoding
+        if BT_AVAILABLE:
+            try:
+                # Decode SS58 using bittensor's utility
+                decoded_bytes = bt.utils.ss58_address_to_bytes(ss58_address)
+                # Ensure it's exactly 32 bytes
+                if len(decoded_bytes) == 32:
+                    return decoded_bytes
+                elif len(decoded_bytes) < 32:
+                    # Pad with zeros if needed
+                    return decoded_bytes + b'\x00' * (32 - len(decoded_bytes))
+                else:
+                    # Take first 32 bytes if longer
+                    return decoded_bytes[:32]
+            except Exception as bt_error:
+                print(f"Warning: Bittensor library decode failed: {bt_error}, trying manual decode...")
+        
+        # Fallback: Manual SS58 decoding
+        decoded = base58.b58decode(ss58_address)
+        
+        if len(decoded) < 2:
+            raise ValueError("Invalid SS58 address: too short")
+        
+        # SS58 format: [prefix_bytes][address_bytes][checksum_bytes]
+        # For Bittensor hotkeys: prefix is 1 byte (42), address is 32 bytes, checksum is 2 bytes
+        # Total: 1 + 32 + 2 = 35 bytes
+        
+        if len(decoded) == 35:
+            # Standard format: 1 byte prefix + 32 bytes address + 2 bytes checksum
+            address_bytes = decoded[1:33]
+        elif len(decoded) == 34:
+            # Possibly: 1 byte prefix + 32 bytes address + 1 byte checksum
+            address_bytes = decoded[1:33]
+        elif len(decoded) == 33:
+            # Possibly: 1 byte prefix + 32 bytes address
+            address_bytes = decoded[1:]
+        elif len(decoded) > 35:
+            # Longer format, try to extract 32 bytes after prefix
+            # Assume 1-2 byte prefix
+            if decoded[0] < 64:
+                prefix_len = 1
+            else:
+                prefix_len = 2
+            address_bytes = decoded[prefix_len:prefix_len+32]
+        else:
+            raise ValueError(f"Unexpected SS58 decoded length: {len(decoded)}")
+        
+        # Ensure we have exactly 32 bytes
+        if len(address_bytes) != 32:
+            if len(address_bytes) < 32:
+                address_bytes = address_bytes + b'\x00' * (32 - len(address_bytes))
+            else:
+                address_bytes = address_bytes[:32]
+        
+        return address_bytes
+    except Exception as e:
+        raise ValueError(f"Failed to decode SS58 address '{ss58_address}': {e}")
+
+
 def stake(w3, account, contract_address, hotkey, netuid, amount):
     """Stake tokens."""
     contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
     if isinstance(hotkey, str):
-        hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-        if len(hotkey_bytes) != 32:
-            raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        # Check if it's SS58 format (starts with 5 and is base58)
+        if hotkey.startswith('5') and len(hotkey) > 40:
+            try:
+                hotkey_bytes = ss58_to_bytes32(hotkey)
+                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
+            except Exception as e:
+                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
+        # Check if it's hex format (0x... or just hex)
+        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
+            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
+            if len(hotkey_bytes) != 32:
+                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        else:
+            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
     # Build transaction
@@ -144,6 +234,28 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
     # Wait for receipt
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
     print(f"Transaction confirmed in block: {receipt.blockNumber}")
+    
+    # Check if transaction succeeded
+    if receipt.status == 0:
+        print("❌ Transaction failed!")
+        # Try to get revert reason
+        try:
+            # Try to call the function to see the revert reason
+            contract.functions.stake(hotkey, netuid, amount).call({'from': account.address})
+        except Exception as revert_error:
+            error_msg = str(revert_error)
+            if "execution reverted" in error_msg.lower():
+                if ":" in error_msg:
+                    revert_reason = error_msg.split(":", 1)[1].strip()
+                    print(f"Revert reason: {revert_reason}")
+                else:
+                    print("Transaction reverted (reason not available)")
+                    print(f"Full error: {error_msg}")
+            else:
+                print(f"Error: {error_msg}")
+        return receipt
+    
+    print("✅ Stake transaction successful!")
     return receipt
 
 
@@ -153,9 +265,20 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
     
     # Convert hotkey string to bytes32
     if isinstance(hotkey, str):
-        hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-        if len(hotkey_bytes) != 32:
-            raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        # Check if it's SS58 format (starts with 5 and is base58)
+        if hotkey.startswith('5') and len(hotkey) > 40:
+            try:
+                hotkey_bytes = ss58_to_bytes32(hotkey)
+                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
+            except Exception as e:
+                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
+        # Check if it's hex format (0x... or just hex)
+        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
+            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
+            if len(hotkey_bytes) != 32:
+                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        else:
+            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
     # Build transaction
@@ -189,9 +312,20 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     
     # Convert hotkey string to bytes32
     if isinstance(hotkey, str):
-        hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
-        if len(hotkey_bytes) != 32:
-            raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        # Check if it's SS58 format (starts with 5 and is base58)
+        if hotkey.startswith('5') and len(hotkey) > 40:
+            try:
+                hotkey_bytes = ss58_to_bytes32(hotkey)
+                print(f"Converted SS58 hotkey {hotkey} to bytes32: {hotkey_bytes.hex()}")
+            except Exception as e:
+                raise ValueError(f"Failed to convert SS58 hotkey: {e}")
+        # Check if it's hex format (0x... or just hex)
+        elif hotkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in hotkey.replace('0x', '')):
+            hotkey_bytes = bytes.fromhex(hotkey.replace('0x', ''))
+            if len(hotkey_bytes) != 32:
+                raise ValueError("Hotkey must be 32 bytes (64 hex characters)")
+        else:
+            raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
     # Build transaction
@@ -395,7 +529,7 @@ def main():
                        help='Action to perform')
     parser.add_argument('--hotkey', type=str, help='Hotkey (32 bytes hex string)')
     parser.add_argument('--netuid', type=int, help='Network UID')
-    parser.add_argument('--amount', type=int, help='Amount to stake/unstake/withdraw (in wei)')
+    parser.add_argument('--amount', type=float, help='Amount to stake/unstake/withdraw (in TAO)')
     parser.add_argument('--limit-price', type=int, dest='limit_price',
                        help='Limit price for stakeLimit')
     parser.add_argument('--allow-partial', action='store_true',
@@ -449,27 +583,37 @@ def main():
     elif args.action == 'stake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("stake requires --hotkey, --netuid, and --amount")
-        stake(w3, account, contract_address, args.hotkey, args.netuid, args.amount)
+        # Convert TAO to rao
+        amount_rao = int(args.amount * 10**18)
+        stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
     
     elif args.action == 'stakeLimit':
         if not all([args.hotkey, args.netuid is not None, args.limit_price is not None,
                    args.amount is not None]):
             parser.error("stakeLimit requires --hotkey, --netuid, --limit-price, and --amount")
+        # Convert TAO to rao
+        amount_rao = int(args.amount * 10**18)
         stake_limit(w3, account, contract_address, args.hotkey, args.netuid,
-                   args.limit_price, args.amount, args.allow_partial)
+                   args.limit_price, amount_rao, args.allow_partial)
     
     elif args.action == 'removeStake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("removeStake requires --hotkey, --netuid, and --amount")
-        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, args.amount)
+        # Convert TAO to rao
+        amount_rao = int(args.amount * 10**18)
+        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
     
     elif args.action == 'withdraw':
-        withdraw(w3, account, contract_address, args.amount)
+        # Convert TAO to rao if amount is provided
+        amount_rao = int(args.amount * 10**18) if args.amount is not None else None
+        withdraw(w3, account, contract_address, amount_rao)
     
     elif args.action == 'withdrawTo':
         if not all([args.to, args.amount is not None]):
             parser.error("withdrawTo requires --to and --amount")
-        withdraw_to(w3, account, contract_address, args.to, args.amount)
+        # Convert TAO to rao
+        amount_rao = int(args.amount * 10**18)
+        withdraw_to(w3, account, contract_address, args.to, amount_rao)
 
 
 if __name__ == '__main__':
