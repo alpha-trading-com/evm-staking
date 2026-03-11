@@ -8,6 +8,15 @@ This guide provides examples for using the `interact.py` script to interact with
 2. Set up your `.env` file with `RPC_URL` and `PRIVATE_KEY`
 3. Ensure your account has sufficient balance for gas fees
 
+## Important Notes
+
+- **Amount Input**: All amount parameters accept TAO values (e.g., `1.5` for 1.5 TAO). The script automatically converts to the appropriate unit (rao or wei) internally.
+- **Unit Conversions**:
+  - **Balance**: Displayed in TAO and wei (1 TAO = 10^18 wei)
+  - **Staking/Unstaking/Transfer/Move**: Uses rao internally (1 TAO = 10^9 rao)
+  - **Withdraw**: Uses wei internally (1 TAO = 10^18 wei)
+- **Parameter Obfuscation**: The contract uses XOR encoding for uint256 parameters for security. This is handled automatically by the script - you don't need to do anything special.
+
 ## Basic Commands
 
 ### 1. Check Contract Owner
@@ -37,7 +46,8 @@ python scripts/interact.py balance
 ```
 Contract address: 0x...
 Account: 0x...
-Contract balance: 0.1 TAO (100000000000000000 rao)
+Contract balance: 0.1 TAO (100000000000000000 wei)
+Note: Balance is in wei (10^18). Staking/unstaking amounts use rao (10^9).
 ```
 
 ### 3. Stake Tokens
@@ -46,23 +56,25 @@ Stake tokens to a hotkey on a specific network:
 
 ```bash
 python scripts/interact.py stake \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
-  --amount 1000000000000000000
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
+  --amount 1.0
 ```
 
 **Parameters:**
-- `--hotkey`: Hotkey address as 32-byte hex string (64 hex characters, with or without 0x prefix)
+- `--hotkey`: Hotkey address as SS58 format (e.g., `5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv`) or 32-byte hex string (64 hex characters, with or without 0x prefix)
 - `--netuid`: Network UID (integer)
-- `--amount`: Amount to stake in rao (1 TAO = 1000000000000000000 rao)
+- `--amount`: Amount to stake in TAO (e.g., `1.0` for 1 TAO, `0.5` for 0.5 TAO)
 
 **Example with 0.5 TAO:**
 ```bash
 python scripts/interact.py stake \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
-  --amount 500000000000000000
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
+  --amount 0.5
 ```
+
+**Note**: The script automatically converts TAO to rao (1 TAO = 10^9 rao) before sending to the contract.
 
 ### 4. Stake with Limit Price
 
@@ -70,91 +82,122 @@ Stake tokens with a limit price (for limit orders):
 
 ```bash
 python scripts/interact.py stakeLimit \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
   --limit-price 1000 \
-  --amount 1000000000000000000 \
+  --amount 1.0 \
   --allow-partial
 ```
 
 **Parameters:**
-- `--hotkey`: Hotkey address (32-byte hex string)
+- `--hotkey`: Hotkey address (SS58 format or 32-byte hex string)
 - `--netuid`: Network UID
-- `--limit-price`: Maximum price to pay (integer)
-- `--amount`: Amount to stake in rao
+- `--limit-price`: Maximum price to pay in rao per alpha (integer)
+- `--amount`: Amount to stake in TAO (e.g., `1.0` for 1 TAO)
 - `--allow-partial`: (Optional) Allow partial fill if full amount can't be staked at limit price
 
 **Example without partial fill:**
 ```bash
 python scripts/interact.py stakeLimit \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
   --limit-price 1000 \
-  --amount 1000000000000000000
+  --amount 1.0
 ```
 
 ### 5. Remove Stake
 
-Unstake tokens from a hotkey:
+Unstake alpha tokens from a hotkey (returns TAO):
 
 ```bash
 python scripts/interact.py removeStake \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
-  --amount 500000000000000000
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
+  --amount 0.1
 ```
 
 **Parameters:**
-- `--hotkey`: Hotkey address (32-byte hex string)
+- `--hotkey`: Hotkey address (SS58 format or 32-byte hex string)
 - `--netuid`: Network UID
-- `--amount`: Amount to unstake in rao
+- `--amount`: Amount to unstake in TAO (e.g., `0.1` for 0.1 TAO). The script converts to rao internally.
 
-### 6. Withdraw All TAO
+**⚠️ Important**: The `removeStake` function unstakes alpha tokens (staking positions), not TAO directly. The amount you specify is converted to rao for the precompile call.
 
-Withdraw all TAO from the contract to the owner:
+### 6. Withdraw TAO
+
+Withdraw TAO from the contract to the predefined allowed coldkey:
 
 ```bash
-python scripts/interact.py withdraw
+python scripts/interact.py withdraw --amount 1.0
+```
+
+**Parameters:**
+- `--amount`: Amount to withdraw in TAO (e.g., `1.0` for 1 TAO, `0.5` for 0.5 TAO)
+
+**Example withdrawing 0.1 TAO:**
+```bash
+python scripts/interact.py withdraw --amount 0.1
 ```
 
 **Output:**
 ```
 Contract address: 0x...
 Account: 0x...
-Contract balance: 0.1 TAO (100000000000000000 rao)
+✅ Verified: You are the contract owner
+Allowed coldkey (bytes32): 0x...
+SS58: 5FsDUVe2zLxTJTR1HzYp35BcNpbeFMLC76uRhwSTGj5YF36C
+Contract balance: 1.0 TAO (1000000000000000000 wei)
+⚠️  Withdrawing 1.0 TAO (1000000000000000000 wei) using balance transfer precompile (0x800)
+   Transferring to allowed coldkey via precompile
+   Note: Withdraw uses wei (10^18), unlike other functions which use rao (10^9)
 Withdraw transaction hash: 0x...
 Transaction confirmed in block: 12345
 ```
 
-### 7. Withdraw Specific Amount
+**⚠️ Important**: 
+- Withdrawals are sent to a **predefined allowed coldkey** (hardcoded in the contract) for safety
+- The `withdraw` function uses **wei** (10^18) internally, unlike staking functions which use rao (10^9)
+- The script automatically converts your TAO input to wei
 
-Withdraw a specific amount of TAO from the contract:
+### 7. Transfer Stake
+
+Transfer stake (alpha tokens) to the predefined allowed coldkey:
 
 ```bash
-python scripts/interact.py withdraw --amount 50000000000000000
+python scripts/interact.py transferStake \
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --origin-netuid 310 \
+  --destination-netuid 310 \
+  --amount 0.5
 ```
 
 **Parameters:**
-- `--amount`: Amount to withdraw in rao (0.05 TAO = 50000000000000000 rao)
+- `--hotkey`: Hotkey address (SS58 format or 32-byte hex string)
+- `--origin-netuid`: Origin subnet ID
+- `--destination-netuid`: Destination subnet ID
+- `--amount`: Amount to transfer in TAO (e.g., `0.5` for 0.5 TAO)
 
-**Example withdrawing 0.1 TAO:**
+**⚠️ Safety**: Stake can only be transferred to the predefined allowed coldkey (hardcoded in the contract).
+
+### 8. Move Stake
+
+Move stake from one hotkey to another:
+
 ```bash
-python scripts/interact.py withdraw --amount 100000000000000000
-```
-
-### 8. Withdraw to Specific Address
-
-Withdraw TAO from the contract to a specific address:
-
-```bash
-python scripts/interact.py withdrawTo \
-  --to 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
-  --amount 100000000000000000
+python scripts/interact.py moveStake \
+  --origin-hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --destination-hotkey 5ABC... \
+  --origin-netuid 310 \
+  --destination-netuid 310 \
+  --amount 0.5
 ```
 
 **Parameters:**
-- `--to`: Recipient address (must be a valid Bittensor EVM address)
-- `--amount`: Amount to withdraw in rao
+- `--origin-hotkey`: Origin hotkey address (SS58 format or 32-byte hex string)
+- `--destination-hotkey`: Destination hotkey address (SS58 format or 32-byte hex string)
+- `--origin-netuid`: Origin subnet ID
+- `--destination-netuid`: Destination subnet ID
+- `--amount`: Amount to move in TAO (e.g., `0.5` for 0.5 TAO)
 
 ## Using a Different Contract Address
 
