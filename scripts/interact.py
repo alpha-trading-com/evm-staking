@@ -99,7 +99,17 @@ def load_deployment_info():
 def get_contract(w3, contract_address, abi=None):
     """Get contract instance."""
     if abi is None:
-        abi = CONTRACT_ABI
+        # Try to load full ABI from artifacts first
+        artifact_path = 'artifacts/contracts/StakeWrap.sol/StakeWrap.json'
+        if os.path.exists(artifact_path):
+            try:
+                with open(artifact_path, 'r') as f:
+                    artifact = json.load(f)
+                    abi = artifact['abi']
+            except:
+                abi = CONTRACT_ABI
+        else:
+            abi = CONTRACT_ABI
     return w3.eth.contract(address=contract_address, abi=abi)
 
 
@@ -219,6 +229,33 @@ def withdraw(w3, account, contract_address, amount=None):
     else:
         contract = get_contract(w3, contract_address)
     
+    # Verify ownership before attempting withdrawal
+    try:
+        owner = contract.functions.owner().call()
+        if owner.lower() != account.address.lower():
+            print(f"❌ ERROR: You are not the contract owner!")
+            print(f"   Contract owner: {owner}")
+            print(f"   Your account: {account.address}")
+            print(f"   You must use the owner's private key to withdraw")
+            return None
+        print(f"✅ Verified: You are the contract owner")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not verify ownership: {e}")
+    
+    # Check if withdraw function exists on the deployed contract
+    try:
+        # Try to get the function code - if it doesn't exist, this will help us detect it
+        if amount is None:
+            # Try a static call to see if function exists
+            try:
+                contract.functions.withdraw().call({'from': account.address, 'gas': 100000})
+            except Exception as call_err:
+                if "execution reverted" not in str(call_err).lower():
+                    # If it's not a revert, the function might not exist
+                    pass
+    except:
+        pass
+    
     # Check contract balance
     balance = w3.eth.get_balance(contract_address)
     print(f"Contract balance: {Web3.from_wei(balance, 'ether')} ETH ({balance} wei)")
@@ -227,7 +264,7 @@ def withdraw(w3, account, contract_address, amount=None):
         print("No funds to withdraw")
         return None
     
-    # Build transaction
+    # Build transaction - use the ABI method first
     try:
         if amount is None:
             # Withdraw all - call withdraw() with no parameters
@@ -248,6 +285,13 @@ def withdraw(w3, account, contract_address, amount=None):
                 'gasPrice': w3.eth.gas_price,
             })
     except Exception as e:
+        error_str = str(e)
+        if "was not found" in error_str or "not found" in error_str.lower():
+            print(f"❌ ERROR: The withdraw function is not available on the deployed contract!")
+            print(f"   This contract was deployed before the withdraw functions were added.")
+            print(f"   You need to redeploy the contract with the updated code.")
+            print(f"   Run: python scripts/deploy.py")
+            return None
         print(f"Error building transaction: {e}")
         print("Trying alternative method using function selector...")
         # Fallback: use function selector directly
@@ -282,12 +326,26 @@ def withdraw(w3, account, contract_address, amount=None):
     # Check if transaction succeeded
     if receipt.status == 0:
         print("❌ Transaction failed!")
-        # Try to decode revert reason if available
+        # Try to get revert reason
         try:
-            if receipt.get('logs') is None or len(receipt.get('logs', [])) == 0:
-                print("Transaction reverted. Check if you're the contract owner.")
+            # Try to call the function to see the revert reason
+            if amount is None:
+                contract.functions.withdraw().call({'from': account.address})
+            else:
+                contract.functions.withdraw(amount).call({'from': account.address})
+        except Exception as revert_error:
+            error_msg = str(revert_error)
+            if "execution reverted" in error_msg:
+                # Extract revert reason if available
+                if ":" in error_msg:
+                    revert_reason = error_msg.split(":", 1)[1].strip()
+                    print(f"Revert reason: {revert_reason}")
+                else:
+                    print("Transaction reverted (reason not available)")
+            else:
+                print(f"Error: {error_msg}")
         except:
-            pass
+            print("Transaction reverted. Could not decode revert reason.")
         return receipt
     
     # Check final balance
@@ -377,6 +435,12 @@ def main():
         contract = get_contract(w3, contract_address)
         owner = contract.functions.owner().call()
         print(f"Contract owner: {owner}")
+        print(f"Your account: {account.address}")
+        if owner.lower() == account.address.lower():
+            print("✅ You are the contract owner")
+        else:
+            print("❌ You are NOT the contract owner")
+            print("   You need to use the owner's private key to withdraw")
     
     elif args.action == 'balance':
         balance = w3.eth.get_balance(contract_address)
