@@ -213,17 +213,22 @@ python scripts/interact.py owner --contract 0xYourContractAddress
 python scripts/interact.py withdraw --contract 0xYourContractAddress
 ```
 
-## Common Amount Conversions
+## Unit Reference
 
-For convenience, here are common TAO amounts in rao:
+For reference, here are the unit conversions used:
 
-| Amount | Rao Value |
-|--------|-----------|
-| 0.001 TAO | 1000000000000000 |
-| 0.01 TAO | 10000000000000000 |
-| 0.1 TAO | 100000000000000000 |
-| 1 TAO | 1000000000000000000 |
-| 10 TAO | 10000000000000000000 |
+| Unit | Value | Usage |
+|------|-------|-------|
+| TAO | 1 | User input (all functions) |
+| wei | 10^18 | Balance display, withdraw function |
+| rao | 10^9 | Staking, unstaking, transfer, move functions |
+
+**Examples:**
+- 1 TAO = 1,000,000,000 rao = 1,000,000,000,000,000,000 wei
+- 0.1 TAO = 100,000,000 rao = 100,000,000,000,000,000 wei
+- 0.001 TAO = 1,000,000 rao = 1,000,000,000,000,000 wei
+
+**Note**: You only need to specify amounts in TAO - the script handles all conversions automatically!
 
 ## Complete Workflow Example
 
@@ -236,23 +241,30 @@ python scripts/interact.py owner
 # 2. Check contract balance
 python scripts/interact.py balance
 
-# 3. Stake 1 TAO to a hotkey on netuid 1
+# 3. Stake 1 TAO to a hotkey on netuid 310
 python scripts/interact.py stake \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
-  --amount 1000000000000000000
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
+  --amount 1.0
 
 # 4. Check balance again
 python scripts/interact.py balance
 
-# 5. Remove 0.5 TAO stake
+# 5. Remove 0.5 TAO worth of stake (alpha tokens)
 python scripts/interact.py removeStake \
-  --hotkey 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef \
-  --netuid 1 \
-  --amount 500000000000000000
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --netuid 310 \
+  --amount 0.5
 
-# 6. Withdraw any remaining TAO from contract
-python scripts/interact.py withdraw
+# 6. Transfer stake to predefined coldkey
+python scripts/interact.py transferStake \
+  --hotkey 5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv \
+  --origin-netuid 310 \
+  --destination-netuid 310 \
+  --amount 0.3
+
+# 7. Withdraw remaining TAO from contract
+python scripts/interact.py withdraw --amount 0.2
 ```
 
 ## Troubleshooting
@@ -266,8 +278,10 @@ python scripts/interact.py withdraw
 - Make sure you have enough TAO to stake
 
 ### Error: "Hotkey must be 32 bytes"
-- Hotkey must be exactly 64 hex characters (with or without 0x prefix)
-- Example: `0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef`
+- Hotkey can be in SS58 format (e.g., `5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv`) or 32-byte hex string
+- If using hex, it must be exactly 64 hex characters (with or without 0x prefix)
+- Example hex: `0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef`
+- Example SS58: `5DXbqNwboeqEvvjNavr2BkiKTKvexYVAMQF1Dne4d567w7Uv`
 
 ### Error: "deployment.json not found"
 - Deploy the contract first: `python scripts/deploy.py`
