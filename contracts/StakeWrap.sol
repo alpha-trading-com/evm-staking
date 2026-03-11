@@ -47,6 +47,9 @@ interface IStaking {
 
 contract StakeWrap {
     address public owner;
+    // Predefined SS58 coldkey address: 5FsDUVe2zLxTJTR1HzYp35BcNpbeFMLC76uRhwSTGj5YF36C
+    bytes32 public constant allowedColdkey = 0xa82db0e41db30fc3d206773f461c87c484b3ac0c25bf703567b4f1aa1ed5b350;
+    
     constructor() {
         owner = msg.sender;
     }
@@ -152,21 +155,21 @@ contract StakeWrap {
     }
     
     /**
-     * @notice Transfer stake (alpha) to another coldkey
-     * @dev This allows the contract to receive alpha tokens from other accounts
-     * @param destination_coldkey The destination coldkey (32 bytes)
+     * @notice Transfer stake (alpha) to the predefined allowed coldkey only
+     * @dev Safety restriction: can only transfer to the predefined SS58 address
      * @param hotkey The hotkey public key (32 bytes)
      * @param origin_netuid The origin subnet ID
      * @param destination_netuid The destination subnet ID
      * @param amount The amount to transfer in rao
      */
     function transferStake(
-        bytes32 destination_coldkey,
         bytes32 hotkey,
         uint256 origin_netuid,
         uint256 destination_netuid,
         uint256 amount
     ) external onlyOwner {
+        // Only allow transfer to predefined coldkey
+        bytes32 destination_coldkey = allowedColdkey;
         bytes memory data = abi.encodeWithSelector(
             IStaking.transferStake.selector,
             destination_coldkey,
@@ -223,35 +226,50 @@ contract StakeWrap {
     }
 
     /**
-     * @notice Withdraw all TAO from the contract to the owner
+     * @notice Withdraw all TAO from the contract to the predefined allowed coldkey
+     * @dev Safety restriction: can only withdraw to the predefined SS58 address
      */
     function withdraw() external onlyOwner {
         uint256 balance = address(this).balance;
         require(balance > 0, "No funds to withdraw");
-        (bool success, ) = payable(owner).call{value: balance}("");
+        
+        // Convert allowed coldkey (bytes32) to EVM address (address)
+        address to = address(uint160(uint256(allowedColdkey)));
+        
+        (bool success, ) = payable(to).call{value: balance}("");
         require(success, "Withdrawal failed");
     }
 
     /**
-     * @notice Withdraw a specific amount of TAO from the contract to the owner
-     * @param amount The amount of TAO to withdraw (in rao)
+     * @notice Withdraw a specific amount of TAO to the predefined allowed coldkey
+     * @dev Safety restriction: can only withdraw to the predefined SS58 address
+     * @param amount The amount of TAO to withdraw (in wei, since it's a balance withdrawal)
      */
     function withdraw(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         require(address(this).balance >= amount, "Insufficient balance");
-        (bool success, ) = payable(owner).call{value: amount}("");
+        
+        // Convert allowed coldkey (bytes32) to EVM address (address)
+        address to = address(uint160(uint256(allowedColdkey)));
+        
+        (bool success, ) = payable(to).call{value: amount}("");
         require(success, "Withdrawal failed");
     }
 
     /**
-     * @notice Withdraw TAO to a specific address
-     * @param to The address to withdraw to
-     * @param amount The amount of TAO to withdraw (in rao)
+     * @notice Withdraw TAO to the predefined allowed coldkey's EVM address
+     * @dev Safety restriction: can only withdraw to the predefined SS58 address
+     *      Converts the allowed coldkey (bytes32) to an EVM address for withdrawal
+     * @param amount The amount of TAO to withdraw (in wei, since it's a balance withdrawal)
      */
-    function withdrawTo(address to, uint256 amount) external onlyOwner {
-        require(to != address(0), "Invalid recipient address");
+    function withdrawTo(uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than 0");
         require(address(this).balance >= amount, "Insufficient balance");
+        
+        // Convert allowed coldkey (bytes32) to EVM address (address)
+        // Take the last 20 bytes of the coldkey as the EVM address
+        address to = address(uint160(uint256(allowedColdkey)));
+        
         (bool success, ) = payable(to).call{value: amount}("");
         require(success, "Withdrawal failed");
     }

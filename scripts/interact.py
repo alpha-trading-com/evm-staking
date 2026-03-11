@@ -93,7 +93,6 @@ CONTRACT_ABI = [
     },
     {
         "inputs": [
-            {"internalType": "bytes32", "name": "destination_coldkey", "type": "bytes32"},
             {"internalType": "bytes32", "name": "hotkey", "type": "bytes32"},
             {"internalType": "uint256", "name": "origin_netuid", "type": "uint256"},
             {"internalType": "uint256", "name": "destination_netuid", "type": "uint256"},
@@ -102,6 +101,13 @@ CONTRACT_ABI = [
         "name": "transferStake",
         "outputs": [],
         "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "allowedColdkey",
+        "outputs": [{"internalType": "bytes32", "name": "", "type": "bytes32"}],
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -552,9 +558,24 @@ def withdraw(w3, account, contract_address, amount=None):
     return receipt
 
 
-def withdraw_to(w3, account, contract_address, to_address, amount):
-    """Withdraw TAO from the contract to a specific address."""
+def withdraw_to(w3, account, contract_address, amount):
+    """
+    Withdraw TAO from the contract to the predefined allowed coldkey.
+    
+    Safety restriction: can only withdraw to the predefined SS58 address set in the contract.
+    """
     contract = get_contract(w3, contract_address)
+    
+    # Get the allowed coldkey from the contract
+    try:
+        allowed_coldkey_bytes32 = contract.functions.allowedColdkey().call()
+        # Convert bytes32 coldkey to EVM address (take last 20 bytes)
+        # bytes32 is 32 bytes, EVM address is 20 bytes (last 20 bytes)
+        allowed_address = Web3.to_checksum_address('0x' + allowed_coldkey_bytes32.hex()[-40:])
+        print(f"Allowed coldkey (bytes32): 0x{allowed_coldkey_bytes32.hex()}")
+        print(f"Allowed address (EVM): {allowed_address}")
+    except Exception as e:
+        print(f"Warning: Could not read allowed coldkey from contract: {e}")
     
     # Check contract balance - balance is in wei (10^18)
     balance_wei = w3.eth.get_balance(contract_address)
@@ -566,11 +587,10 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     if amount > balance_wei:
         raise ValueError(f"Amount ({amount_tao} TAO = {amount} wei) exceeds contract balance ({balance_tao} TAO = {balance_wei} wei)")
     
-    # Validate recipient address
-    to_address = Web3.to_checksum_address(to_address)
+    print(f"⚠️  Safety: Withdrawing to predefined allowed coldkey only")
     
-    # Build transaction - amount is in wei
-    tx = contract.functions.withdrawTo(to_address, amount).build_transaction({
+    # Build transaction - no address parameter needed, uses predefined one
+    tx = contract.functions.withdrawTo(amount).build_transaction({
         'from': account.address,
         'nonce': w3.eth.get_transaction_count(account.address),
         'gas': 100000,
@@ -589,15 +609,22 @@ def withdraw_to(w3, account, contract_address, to_address, amount):
     return receipt
 
 
-def transfer_stake(w3, account, contract_address, destination_coldkey, hotkey, origin_netuid, destination_netuid, amount):
+def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destination_netuid, amount):
     """
-    Transfer stake (alpha) to another coldkey.
+    Transfer stake (alpha) to the predefined allowed coldkey only.
     
-    This allows transferring alpha tokens to another account's coldkey.
+    Safety restriction: can only transfer to the predefined SS58 address set in the contract.
     """
     contract = get_contract(w3, contract_address)
     
-    # Convert hotkey and coldkey strings to bytes32
+    # Get the allowed coldkey from the contract
+    try:
+        allowed_coldkey_bytes32 = contract.functions.allowedColdkey().call()
+        print(f"Allowed coldkey (bytes32): 0x{allowed_coldkey_bytes32.hex()}")
+    except Exception as e:
+        print(f"Warning: Could not read allowed coldkey from contract: {e}")
+    
+    # Convert hotkey string to bytes32
     if isinstance(hotkey, str):
         if hotkey.startswith('5') and len(hotkey) > 40:
             try:
@@ -613,29 +640,13 @@ def transfer_stake(w3, account, contract_address, destination_coldkey, hotkey, o
             raise ValueError("Hotkey must be either SS58 format or 32-byte hex string")
         hotkey = hotkey_bytes
     
-    if isinstance(destination_coldkey, str):
-        if destination_coldkey.startswith('5') and len(destination_coldkey) > 40:
-            try:
-                coldkey_bytes = ss58_to_bytes32(destination_coldkey)
-                print(f"Converted SS58 coldkey {destination_coldkey} to bytes32: {coldkey_bytes.hex()}")
-            except Exception as e:
-                raise ValueError(f"Failed to convert SS58 coldkey: {e}")
-        elif destination_coldkey.startswith('0x') or all(c in '0123456789abcdefABCDEF' for c in destination_coldkey.replace('0x', '')):
-            coldkey_bytes = bytes.fromhex(destination_coldkey.replace('0x', ''))
-            if len(coldkey_bytes) != 32:
-                raise ValueError("Coldkey must be 32 bytes (64 hex characters)")
-        else:
-            raise ValueError("Coldkey must be either SS58 format or 32-byte hex string")
-        destination_coldkey = coldkey_bytes
-    
     print(f"Transferring {amount / 10**9} TAO ({amount} rao) worth of stake (alpha)")
     print(f"From netuid {origin_netuid} to netuid {destination_netuid}")
     print(f"Hotkey (bytes32): 0x{hotkey.hex()}")
-    print(f"Destination coldkey (bytes32): 0x{destination_coldkey.hex()}")
+    print(f"⚠️  Safety: Transferring to predefined allowed coldkey only")
     
-    # Build transaction
+    # Build transaction - no destination_coldkey parameter needed, uses predefined one
     tx = contract.functions.transferStake(
-        destination_coldkey,
         hotkey,
         origin_netuid,
         destination_netuid,
@@ -723,7 +734,6 @@ def main():
     parser.add_argument('--hotkey', type=str, help='Hotkey (SS58 or 32 bytes hex string)')
     parser.add_argument('--origin-hotkey', type=str, help='Origin hotkey for moveStake (SS58 or 32 bytes hex string)')
     parser.add_argument('--destination-hotkey', type=str, help='Destination hotkey for moveStake (SS58 or 32 bytes hex string)')
-    parser.add_argument('--destination-coldkey', type=str, help='Destination coldkey for transferStake (SS58 or 32 bytes hex string)')
     parser.add_argument('--netuid', type=int, help='Network UID')
     parser.add_argument('--origin-netuid', type=int, help='Origin netuid for transferStake/moveStake')
     parser.add_argument('--destination-netuid', type=int, help='Destination netuid for transferStake/moveStake')
@@ -733,7 +743,6 @@ def main():
     parser.add_argument('--allow-partial', action='store_true',
                        help='Allow partial fill for stakeLimit')
     parser.add_argument('--contract', type=str, help='Contract address (overrides deployment.json)')
-    parser.add_argument('--to', type=str, help='Recipient address for withdrawTo')
     
     args = parser.parse_args()
     
@@ -807,12 +816,12 @@ def main():
         remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
     
     elif args.action == 'transferStake':
-        if not all([args.destination_coldkey, args.hotkey, args.origin_netuid is not None, 
+        if not all([args.hotkey, args.origin_netuid is not None, 
                    args.destination_netuid is not None, args.amount is not None]):
-            parser.error("transferStake requires --destination-coldkey, --hotkey, --origin-netuid, --destination-netuid, and --amount")
+            parser.error("transferStake requires --hotkey, --origin-netuid, --destination-netuid, and --amount")
         # Convert TAO to rao (1 TAO = 10^9 rao)
         amount_rao = int(args.amount * 10**9)
-        transfer_stake(w3, account, contract_address, args.destination_coldkey, args.hotkey,
+        transfer_stake(w3, account, contract_address, args.hotkey,
                        args.origin_netuid, args.destination_netuid, amount_rao)
     
     elif args.action == 'moveStake':
@@ -831,11 +840,11 @@ def main():
         withdraw(w3, account, contract_address, amount_wei)
     
     elif args.action == 'withdrawTo':
-        if not all([args.to, args.amount is not None]):
-            parser.error("withdrawTo requires --to and --amount")
+        if args.amount is None:
+            parser.error("withdrawTo requires --amount")
         # Withdraw amount should be in wei (10^18) since it's a balance withdrawal
         amount_wei = int(args.amount * 10**18)
-        withdraw_to(w3, account, contract_address, args.to, amount_wei)
+        withdraw_to(w3, account, contract_address, amount_wei)
 
 
 if __name__ == '__main__':
