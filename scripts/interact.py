@@ -758,21 +758,21 @@ def main():
             parser.error("removeStakeLimit requires --hotkey, --netuid, --limit-price, and --amount")
         # Amount is in ALPHA tokens (not TAO/rao!)
         # User provides amount directly (no conversion needed)
-        amount_alpha = int(args.amount)
-        print(f"⚠️  Note: removeStakeLimit amount is in ALPHA tokens, not TAO!")
-        print(f"   You specified: {amount_alpha} ALPHA")
+        amount_rao = int(args.amount * 10**9)
+        print(f"⚠️  Note: removeStakeLimit amount is in rao, not TAO!")
+        print(f"   You specified: {amount_rao} rao")
         remove_stake_limit(w3, account, contract_address, args.hotkey, args.netuid,
-                          args.limit_price, amount_alpha, args.allow_partial)
+                          args.limit_price, amount_rao, args.allow_partial)
     
     elif args.action == 'removeStake':
         if not all([args.hotkey, args.netuid is not None, args.amount is not None]):
             parser.error("removeStake requires --hotkey, --netuid, and --amount")
         # Amount is in ALPHA tokens (not TAO/rao!)
         # User provides amount directly (no conversion needed)
-        amount_alpha = int(args.amount)
-        print(f"⚠️  Note: removeStake amount is in ALPHA tokens, not TAO!")
-        print(f"   You specified: {amount_alpha} ALPHA")
-        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_alpha)
+        amount_rao = int(args.amount * 10**9)
+        print(f"⚠️  Note: removeStake amount is in rao, not TAO!")
+        print(f"   You specified: {amount_rao} rao")
+        remove_stake(w3, account, contract_address, args.hotkey, args.netuid, amount_rao)
     
     elif args.action == 'transferStake':
         if not all([args.hotkey, args.origin_netuid is not None, 
