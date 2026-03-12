@@ -27,14 +27,6 @@
     h1 { font-size: 1.75rem; margin: 0 0 0.5rem 0; }
     h2 { font-size: 1.25rem; margin: 0 0 1rem 0; }
     .container { max-width: 56rem; margin: 0 auto; }
-    .status {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1rem;
-      margin-bottom: 1.5rem;
-    }
-    .status pre { margin: 0.5rem 0 0 0; white-space: pre-wrap; word-break: break-all; font-size: 0.85rem; color: var(--muted); }
     .tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
     .tabs button {
       background: transparent;
@@ -93,12 +85,6 @@
       Control stake, stake limit, unstake, unstake limit, transfer stake, move stake, and withdraw operations via UI.
       Powered by FastAPI + uvicorn.
     </p>
-
-    <div class="status">
-      <strong>Contract Status</strong>
-      <pre id="status">Loading...</pre>
-      <button type="button" class="refresh-btn" onclick="loadStatus()">Refresh</button>
-    </div>
 
     <div class="tabs" id="tabs"></div>
 
@@ -239,18 +225,6 @@
       };
       document.getElementById('tabs').appendChild(b);
     });
-
-    async function loadStatus() {
-      const el = document.getElementById('status');
-      try {
-        const r = await fetch('/api/status');
-        const j = await r.json();
-        el.textContent = JSON.stringify(j, null, 2);
-      } catch (e) {
-        el.textContent = 'Error: ' + e;
-      }
-    }
-    loadStatus();
 
     function showResult(elId, ok, text) {
       const el = document.getElementById(elId);
