@@ -17,6 +17,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 os.chdir(_REPO_ROOT)
 
+import bittensor as bt
+
 from dotenv import load_dotenv
 
 load_dotenv(_REPO_ROOT / ".env")
@@ -50,7 +52,9 @@ except ImportError:
 
 app = FastAPI(title="StakeWrap Control", version="1.0.0")
 templates = Jinja2Templates(directory=str(_REPO_ROOT / "app" / "templates"))
+subtensor = bt.Subtensor(network="finney")
 
+COLDKEY_SS58 = os.getenv("COLDKEY", "5GBY9k83ydqCedqg1NLrWTKy8R6afTkwz5FPSyar3tCcBGQ5")
 
 def _get_w3_account_contract():
     rpc_url = os.getenv("RPC_URL", "https://test.finney.opentensor.ai/")
@@ -136,13 +140,13 @@ class StakeLimitBody(BaseModel):
 class RemoveStakeBody(BaseModel):
     hotkey: str
     netuid: int
-    amount: int
+    amount: int | None = None
 
 
 class RemoveStakeLimitBody(BaseModel):
     hotkey: str
     netuid: int
-    amount: int
+    amount: int | None = None
     # Tolerance-based inputs
     rate_tolerance: float = 0.5
     use_min_tolerance: bool = False
@@ -199,7 +203,7 @@ async def api_stake_limit(body: StakeLimitBody):
                 netuid=body.netuid,
                 min_tolerance_staking=body.use_min_tolerance,
                 default_rate_tolerance=body.rate_tolerance,
-                subtensor=None  # Will create one internally
+                subtensor=subtensor  # Will create one internally
             ))
         else:
             return JSONResponse(
@@ -227,6 +231,21 @@ async def api_stake_limit(body: StakeLimitBody):
 async def api_remove_stake(body: RemoveStakeBody):
     try:
         w3, account, contract_address = _get_w3_account_contract()
+        
+        # If amount is None, unstake all balance
+        if body.amount is None:
+            # Get full stake balance using subtensor
+            stake_balance = subtensor.get_stake(
+                coldkey_ss58=COLDKEY_SS58,
+                hotkey_ss58=body.hotkey,
+                netuid=body.netuid
+            )
+            # Convert to ALPHA tokens in rao (stake balance is already in rao)
+            amount_alpha_rao = stake_balance.rao - 1
+        else:
+            # Convert amount to ALPHA tokens in rao
+            amount_alpha_rao = int(body.amount * 10**9)
+        
         receipt = _run_quiet(
             remove_stake,
             w3,
@@ -234,7 +253,7 @@ async def api_remove_stake(body: RemoveStakeBody):
             contract_address,
             body.hotkey,
             body.netuid,
-            int(body.amount * 10**9),
+            amount_alpha_rao,
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
@@ -246,18 +265,34 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         
+        # If amount is None, unstake all balance
+        if body.amount is None:
+            
+            # Get full stake balance using subtensor
+            stake_balance = subtensor.get_stake(
+                coldkey_ss58=COLDKEY_SS58,
+                hotkey_ss58=body.hotkey,
+                netuid=body.netuid
+            )
+            # Convert to ALPHA tokens in rao (stake balance is already in rao)
+            amount_alpha_rao = stake_balance.rao - 1
+            amount_tao = stake_balance.tao
+        else:
+            # Convert amount to ALPHA tokens in rao
+            amount_alpha_rao = int(body.amount * 10**9)
+            amount_tao = body.amount / 10**9
+        
         # Calculate limit_price from tolerance if not provided directly
         if body.limit_price is not None:
             limit_price = body.limit_price
         elif TOLERANCE_AVAILABLE:
-            # Convert amount (alpha raw units) to TAO for tolerance calculation
-            amount_tao = body.amount / 10**9
+            # Use amount_tao for tolerance calculation
             limit_price = int(calculate_unstake_limit_price(
                 tao_amount=amount_tao,
                 netuid=body.netuid,
                 min_tolerance_unstaking=body.use_min_tolerance,
                 default_rate_tolerance=body.rate_tolerance,
-                subtensor=None
+                subtensor=subtensor
             ))
         else:
             return JSONResponse(
@@ -273,7 +308,7 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody):
             body.hotkey,
             body.netuid,
             limit_price,
-            int(body.amount * 10**9),
+            amount_alpha_rao,
             body.allow_partial,
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt), "limit_price_used": limit_price}
@@ -354,7 +389,7 @@ async def api_calc_min_tolerance(body: CalcToleranceBody):
                 netuid=body.netuid,
                 min_tolerance_staking=True,
                 default_rate_tolerance=0.0,  # Ignored when min_tolerance=True
-                subtensor=None
+                subtensor=subtensor
             ))
         else:  # unstake
             limit_price = int(calculate_unstake_limit_price(
@@ -362,7 +397,7 @@ async def api_calc_min_tolerance(body: CalcToleranceBody):
                 netuid=body.netuid,
                 min_tolerance_unstaking=True,
                 default_rate_tolerance=0.0,
-                subtensor=None
+                subtensor=subtensor
             ))
         return {"ok": True, "limit_price": limit_price, "operation": body.operation}
     except Exception as e:
