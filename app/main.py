@@ -43,12 +43,7 @@ from scripts.interact import (
 )
 
 # Import tolerance calculation utilities
-try:
-    from utils.tolerance import calculate_stake_limit_price, calculate_unstake_limit_price
-    TOLERANCE_AVAILABLE = True
-except ImportError:
-    TOLERANCE_AVAILABLE = False
-    print("Warning: utils.tolerance not available - tolerance features disabled")
+from utils.tolerance import calculate_stake_limit_price, calculate_unstake_limit_price
 
 app = FastAPI(title="StakeWrap Control", version="1.0.0")
 templates = Jinja2Templates(directory=str(_REPO_ROOT / "app" / "templates"))
@@ -132,8 +127,6 @@ class StakeLimitBody(BaseModel):
     # Tolerance-based inputs (like alpha-trading-com/staking UI)
     rate_tolerance: float = 0.5  # Default 50% tolerance
     use_min_tolerance: bool = False  # "Use Min Tolerance" checkbox
-    # Optional: override with raw limit_price
-    limit_price: int | None = None
     allow_partial: bool = False
 
 
@@ -150,8 +143,6 @@ class RemoveStakeLimitBody(BaseModel):
     # Tolerance-based inputs
     rate_tolerance: float = 0.5
     use_min_tolerance: bool = False
-    # Optional: override with raw limit_price
-    limit_price: int | None = None
     allow_partial: bool = False
 
 
@@ -193,24 +184,15 @@ async def api_stake_limit(body: StakeLimitBody):
         w3, account, contract_address = _get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
         
-        # Calculate limit_price from tolerance if not provided directly
-        if body.limit_price is not None:
-            limit_price = body.limit_price
-        elif TOLERANCE_AVAILABLE:
-            # Use utils.tolerance to calculate limit_price
-            limit_price = int(calculate_stake_limit_price(
-                tao_amount=body.amount_tao,
-                netuid=body.netuid,
-                min_tolerance_staking=body.use_min_tolerance,
-                default_rate_tolerance=body.rate_tolerance,
-                subtensor=subtensor  # Will create one internally
-            ))
-        else:
-            return JSONResponse(
-                {"ok": False, "error": "Must provide limit_price or have utils.tolerance available"},
-                status_code=400
-            )
-        print(limit_price)
+        # Calculate limit_price from tolerance
+        limit_price = int(calculate_stake_limit_price(
+            tao_amount=body.amount_tao,
+            netuid=body.netuid,
+            min_tolerance_staking=body.use_min_tolerance,
+            default_rate_tolerance=body.rate_tolerance,
+            subtensor=subtensor
+        ))
+        
         receipt = _run_quiet(
             stake_limit,
             w3,
@@ -282,23 +264,14 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody):
             amount_alpha_rao = int(body.amount * 10**9)
             amount_tao = body.amount / 10**9
         
-        # Calculate limit_price from tolerance if not provided directly
-        if body.limit_price is not None:
-            limit_price = body.limit_price
-        elif TOLERANCE_AVAILABLE:
-            # Use amount_tao for tolerance calculation
-            limit_price = int(calculate_unstake_limit_price(
-                tao_amount=amount_tao,
-                netuid=body.netuid,
-                min_tolerance_unstaking=body.use_min_tolerance,
-                default_rate_tolerance=body.rate_tolerance,
-                subtensor=subtensor
-            ))
-        else:
-            return JSONResponse(
-                {"ok": False, "error": "Must provide limit_price or have utils.tolerance available"},
-                status_code=400
-            )
+        # Calculate limit_price from tolerance
+        limit_price = int(calculate_unstake_limit_price(
+            tao_amount=amount_tao,
+            netuid=body.netuid,
+            min_tolerance_unstaking=body.use_min_tolerance,
+            default_rate_tolerance=body.rate_tolerance,
+            subtensor=subtensor
+        ))
         
         receipt = _run_quiet(
             remove_stake_limit,
@@ -377,11 +350,6 @@ class CalcToleranceBody(BaseModel):
 @app.post("/api/calc-min-tolerance")
 async def api_calc_min_tolerance(body: CalcToleranceBody):
     """Calculate minimum tolerance for staking/unstaking operations."""
-    if not TOLERANCE_AVAILABLE:
-        return JSONResponse(
-            {"ok": False, "error": "Tolerance calculation not available (utils.tolerance not found)"},
-            status_code=400
-        )
     try:
         if body.operation == "stake":
             limit_price = int(calculate_stake_limit_price(
