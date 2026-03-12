@@ -206,7 +206,7 @@ async def api_stake_limit(body: StakeLimitBody):
                 {"ok": False, "error": "Must provide limit_price or have utils.tolerance available"},
                 status_code=400
             )
-        
+        print(limit_price)
         receipt = _run_quiet(
             stake_limit,
             w3,
@@ -234,7 +234,7 @@ async def api_remove_stake(body: RemoveStakeBody):
             contract_address,
             body.hotkey,
             body.netuid,
-            body.amount,
+            int(body.amount * 10**9),
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
@@ -273,7 +273,7 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody):
             body.hotkey,
             body.netuid,
             limit_price,
-            body.amount,
+            int(body.amount * 10**9),
             body.allow_partial,
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt), "limit_price_used": limit_price}
