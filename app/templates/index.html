@@ -90,25 +90,23 @@
 
     <section class="panel active" id="panel-stake">
       <h2>Stake (addStake)</h2>
-      <label>Hotkey (SS58 or 0x...)</label>
-      <input id="stake-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
-      <label>Netuid</label>
-      <input id="stake-netuid" type="number" value="1" />
       <label>Amount (TAO)</label>
       <input id="stake-amount" type="number" step="any" placeholder="e.g. 0.1" />
       <small class="hint">Amount will be converted to rao (1 TAO = 10^9 rao)</small>
+      <label>Netuid</label>
+      <input id="stake-netuid" type="number" value="1" />
+      <label>Hotkey (SS58 or 0x...)</label>
+      <input id="stake-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
       <button class="submit" onclick="postStake()">Submit Stake</button>
       <div id="stake-result"></div>
     </section>
 
     <section class="panel" id="panel-stake-limit">
       <h2>Stake Limit (addStakeLimit)</h2>
-      <label>Hotkey (Validator Hotkey)</label>
-      <input id="sl-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
-      <label>Network ID</label>
-      <input id="sl-netuid" type="number" value="1" />
       <label>TAO Amount</label>
       <input id="sl-amount" type="number" step="any" placeholder="e.g. 60" />
+      <label>Network ID</label>
+      <input id="sl-netuid" type="number" value="1" />
       <label>Rate Tolerance</label>
       <input id="sl-tolerance" type="number" step="any" value="0.5" placeholder="e.g. 0.5" />
       <small class="hint">This value will be ignored when "Use Minimum Tolerance" is checked</small>
@@ -118,6 +116,8 @@
       <label style="margin-top: 0.5rem;">
         <input id="sl-partial" type="checkbox" /> Allow Partial Staking
       </label>
+      <label>Hotkey (Validator Hotkey)</label>
+      <input id="sl-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
       <button class="submit" onclick="postStakeLimit()">Stake</button>
       <button type="button" class="refresh-btn" style="margin-left: 0.5rem;" onclick="calcMinToleranceStake()">Calculate Min Tolerance</button>
       <div id="sl-result"></div>
@@ -126,25 +126,23 @@
     <section class="panel" id="panel-remove">
       <h2>Unstake (removeStake)</h2>
       <small class="hint">Amount is in raw alpha units (integer). Same convention as CLI.</small>
-      <label>Hotkey</label>
-      <input id="rs-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
-      <label>Netuid</label>
-      <input id="rs-netuid" type="number" value="1" />
       <label>Amount (integer, alpha raw units)</label>
       <input id="rs-amount" type="number" placeholder="e.g. 100000000" />
+      <label>Netuid</label>
+      <input id="rs-netuid" type="number" value="1" />
+      <label>Hotkey</label>
+      <input id="rs-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
       <button class="submit" onclick="postRemoveStake()">Submit Unstake</button>
       <div id="rs-result"></div>
     </section>
 
     <section class="panel" id="panel-remove-limit">
       <h2>Unstake Limit (removeStakeLimit)</h2>
-      <label>Hotkey</label>
-      <input id="rsl-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
-      <label>Network ID</label>
-      <input id="rsl-netuid" type="number" value="1" />
       <label>Amount (integer, alpha raw units)</label>
       <input id="rsl-amount" type="number" placeholder="e.g. 100000000" />
       <small class="hint">Amount is in raw alpha units (same as CLI: int(amount*1e9))</small>
+      <label>Network ID</label>
+      <input id="rsl-netuid" type="number" value="1" />
       <label>Rate Tolerance</label>
       <input id="rsl-tolerance" type="number" step="any" value="0.5" placeholder="e.g. 0.5" />
       <small class="hint">Ignored when "Use Minimum Tolerance" is checked</small>
@@ -154,6 +152,8 @@
       <label style="margin-top: 0.5rem;">
         <input id="rsl-partial" type="checkbox" /> Allow partial fill
       </label>
+      <label>Hotkey</label>
+      <input id="rsl-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
       <button class="submit" onclick="postRemoveStakeLimit()">Unstake</button>
       <button type="button" class="refresh-btn" style="margin-left: 0.5rem;" onclick="calcMinToleranceUnstake()">Calculate Min Tolerance</button>
       <div id="rsl-result"></div>
@@ -162,14 +162,14 @@
     <section class="panel" id="panel-transfer">
       <h2>Transfer Stake</h2>
       <small class="hint">Transfer stake to the predefined allowed coldkey only.</small>
-      <label>Hotkey</label>
-      <input id="ts-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
+      <label>Amount (TAO)</label>
+      <input id="ts-amount" type="number" step="any" placeholder="e.g. 0.1" />
       <label>Origin Netuid</label>
       <input id="ts-origin" type="number" value="1" />
       <label>Destination Netuid</label>
       <input id="ts-dest" type="number" value="1" />
-      <label>Amount (TAO)</label>
-      <input id="ts-amount" type="number" step="any" placeholder="e.g. 0.1" />
+      <label>Hotkey</label>
+      <input id="ts-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
       <button class="submit" onclick="postTransferStake()">Submit Transfer Stake</button>
       <div id="ts-result"></div>
     </section>
@@ -177,16 +177,16 @@
     <section class="panel" id="panel-move">
       <h2>Move Stake</h2>
       <small class="hint">Move stake between different hotkeys.</small>
-      <label>Origin Hotkey</label>
-      <input id="ms-origin-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
-      <label>Destination Hotkey</label>
-      <input id="ms-dest-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
+      <label>Amount (TAO)</label>
+      <input id="ms-amount" type="number" step="any" placeholder="e.g. 0.1" />
       <label>Origin Netuid</label>
       <input id="ms-origin" type="number" value="1" />
       <label>Destination Netuid</label>
       <input id="ms-dest" type="number" value="1" />
-      <label>Amount (TAO)</label>
-      <input id="ms-amount" type="number" step="any" placeholder="e.g. 0.1" />
+      <label>Origin Hotkey</label>
+      <input id="ms-origin-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
+      <label>Destination Hotkey</label>
+      <input id="ms-dest-hotkey" placeholder="5... or 0x..." value="5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21" />
       <button class="submit" onclick="postMoveStake()">Submit Move Stake</button>
       <div id="ms-result"></div>
     </section>
