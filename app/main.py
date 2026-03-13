@@ -214,18 +214,22 @@ async def api_remove_stake(body: RemoveStakeBody):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         
-        # If amount is None, unstake all balance
+        # If amount is None, unstake all balance; if 0 < amount < 1, treat as fraction of staked
         if body.amount is None:
-            # Get full stake balance using subtensor
             stake_balance = subtensor.get_stake(
                 coldkey_ss58=COLDKEY_SS58,
                 hotkey_ss58=body.hotkey,
                 netuid=body.netuid
             )
-            # Convert to ALPHA tokens in rao (stake balance is already in rao)
             amount_alpha_rao = stake_balance.rao - 1
+        elif 0 < body.amount < 1:
+            stake_balance = subtensor.get_stake(
+                coldkey_ss58=COLDKEY_SS58,
+                hotkey_ss58=body.hotkey,
+                netuid=body.netuid
+            )
+            amount_alpha_rao = int(body.amount * stake_balance.rao)
         else:
-            # Convert amount to ALPHA tokens in rao
             amount_alpha_rao = int(body.amount * 10**9)
         
         receipt = _run_quiet(
@@ -247,20 +251,24 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         
-        # If amount is None, unstake all balance
+        # If amount is None, unstake all; if 0 < amount < 1, treat as fraction of staked
         if body.amount is None:
-            
-            # Get full stake balance using subtensor
             stake_balance = subtensor.get_stake(
                 coldkey_ss58=COLDKEY_SS58,
                 hotkey_ss58=body.hotkey,
                 netuid=body.netuid
             )
-            # Convert to ALPHA tokens in rao (stake balance is already in rao)
             amount_alpha_rao = stake_balance.rao - 1
             amount_tao = stake_balance.tao
+        elif 0 < body.amount < 1:
+            stake_balance = subtensor.get_stake(
+                coldkey_ss58=COLDKEY_SS58,
+                hotkey_ss58=body.hotkey,
+                netuid=body.netuid
+            )
+            amount_alpha_rao = int(body.amount * stake_balance.rao)
+            amount_tao = body.amount * stake_balance.tao
         else:
-            # Convert amount to ALPHA tokens in rao
             amount_alpha_rao = int(body.amount * 10**9)
             amount_tao = body.amount / 10**9
         
@@ -313,7 +321,7 @@ async def api_transfer_stake(body: TransferStakeBody):
 async def api_move_stake(body: MoveStakeBody):
     try:
         w3, account, contract_address = _get_w3_account_contract()
-        # If amount is None, move all alpha (same as unstake)
+        # If amount is None, move all alpha; if 0 < amount_tao < 1, treat as fraction of staked
         if body.amount_tao is None:
             stake_balance = subtensor.get_stake(
                 coldkey_ss58=COLDKEY_SS58,
@@ -321,6 +329,13 @@ async def api_move_stake(body: MoveStakeBody):
                 netuid=body.origin_netuid,
             )
             amount_rao = stake_balance.rao - 1
+        elif 0 < body.amount_tao < 1:
+            stake_balance = subtensor.get_stake(
+                coldkey_ss58=COLDKEY_SS58,
+                hotkey_ss58=body.origin_hotkey,
+                netuid=body.origin_netuid,
+            )
+            amount_rao = int(body.amount_tao * stake_balance.rao)
         else:
             amount_rao = int(body.amount_tao * 10**9)
         receipt = _run_quiet(
