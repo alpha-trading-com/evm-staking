@@ -133,13 +133,13 @@ class StakeLimitBody(BaseModel):
 class RemoveStakeBody(BaseModel):
     hotkey: str
     netuid: int
-    amount: int | None = None
+    amount: float | None = None
 
 
 class RemoveStakeLimitBody(BaseModel):
     hotkey: str
     netuid: int
-    amount: int | None = None
+    amount: float | None = None
     # Tolerance-based inputs
     rate_tolerance: float = 0.5
     use_min_tolerance: bool = False
