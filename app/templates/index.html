@@ -26,7 +26,12 @@
     }
     h1 { font-size: 1.75rem; margin: 0 0 0.5rem 0; }
     h2 { font-size: 1.25rem; margin: 0 0 1rem 0; }
-    .container { max-width: 56rem; margin: 0 auto; }
+    .container { max-width: 100%; margin: 0 auto; }
+    .main-split { display: flex; gap: 1.5rem; align-items: flex-start; }
+    .main-left { flex: 1; min-width: 0; }
+    .main-left h2 { font-size: 1.25rem; margin: 0 0 1rem 0; }
+    .stake-info-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; }
+    .main-right { flex: 1; min-width: 0; }
     .tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
     .tabs button {
       background: transparent;
@@ -76,17 +81,43 @@
     small.hint { color: var(--muted); display: block; margin-top: 0.25rem; font-size: 0.85rem; }
     .refresh-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; margin-top: 0.75rem; }
     .refresh-btn:hover { background: var(--border); }
+    .stake-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .stake-table th, .stake-table td { padding: 0.6rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+    .stake-table th { background: var(--bg); color: var(--muted); font-weight: 600; }
+    .stake-table tr:hover { background: rgba(59, 130, 246, 0.1); }
+    .unstake-btn { background: var(--accent); border: none; color: #fff; padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+    .unstake-btn:hover { opacity: 0.9; }
+    .unstake-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .loading { color: var(--muted); font-style: italic; }
+    .wallet-footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .wallet-footer-title { font-weight: 600; margin-bottom: 0.5rem; color: var(--text); }
+    .wallet-footer-content { font-size: 0.85rem; line-height: 1.8; color: var(--muted); font-family: monospace; }
+    .wallet-footer-content div { margin-bottom: 0.25rem; }
+    @media (max-width: 1200px) {
+      .main-split { flex-direction: column; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🔐 StakeWrap Control</h1>
-    <p style="color: var(--muted); margin-bottom: 1.5rem;">
-      Control stake, stake limit, unstake, unstake limit, transfer stake, move stake, and withdraw operations via UI.
-      Powered by FastAPI + uvicorn.
-    </p>
+    <div class="main-split">
+      <div class="main-left">
+        <div class="stake-info-panel">
+          <h2 style="margin-top: 0;">Stake Info</h2>
+          <button type="button" class="refresh-btn" onclick="loadStakeInfo()">Refresh</button>
+          <div id="stake-info-container">
+            <div class="loading">Loading stake info...</div>
+          </div>
+        </div>
+      </div>
+      <div class="main-right">
+        <h1>🔐 StakeWrap Control</h1>
+        <p style="color: var(--muted); margin-bottom: 1.5rem;">
+          Control stake, stake limit, unstake, unstake limit, transfer stake, move stake, and withdraw operations via UI.
+          Powered by FastAPI + uvicorn.
+        </p>
 
-    <div class="tabs" id="tabs"></div>
+        <div class="tabs" id="tabs"></div>
 
     <section class="panel active" id="panel-stake">
       <h2>Stake (addStake)</h2>
@@ -199,7 +230,8 @@
       <button class="submit" onclick="postWithdraw()">Submit Withdraw</button>
       <div id="wd-result"></div>
     </section>
-
+      </div>
+    </div>
   </div>
 
   <script>
@@ -280,6 +312,7 @@
       restoreAllInputs();
       setupFieldPersistence();
       restoreActiveTab(); // new for tab persist
+      loadStakeInfo(); // Load stake info on page load
     });
 
     // --- Persistence END ---
@@ -395,10 +428,12 @@
       }
     }
     function postRemoveStake() {
+      const amountValue = document.getElementById('rs-amount').value.trim();
+      const amount = amountValue === '' ? null : parseInt(amountValue, 10);
       postJson('/api/remove-stake', {
         hotkey: document.getElementById('rs-hotkey').value.trim(),
         netuid: parseInt(document.getElementById('rs-netuid').value, 10),
-        amount: parseInt(document.getElementById('rs-amount').value, 10),
+        amount: amount,
       }, 'rs-result');
     }
     function postRemoveStakeLimit() {
@@ -457,6 +492,91 @@
       postJson('/api/withdraw', {
         amount_tao: parseFloat(document.getElementById('wd-amount').value),
       }, 'wd-result');
+    }
+
+    async function loadStakeInfo() {
+      const container = document.getElementById('stake-info-container');
+      container.innerHTML = '<div class="loading">Loading stake info...</div>';
+      
+      try {
+        const r = await fetch('/api/stake-info');
+        const j = await r.json();
+        
+        if (!j.ok) {
+          container.innerHTML = '<div class="result err">Error: ' + (j.error || 'Failed to load stake info') + '</div>';
+          return;
+        }
+        
+        if (!j.stakes || j.stakes.length === 0) {
+          let html = '<div class="result" style="background: rgba(139, 156, 179, 0.15); border: 1px solid var(--muted); color: var(--muted); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">No stakes found for coldkey: ' + j.coldkey + '</div>';
+          
+          // Still show wallet info even if no stakes
+          html += '<div class="wallet-footer">';
+          html += '<div class="wallet-footer-title">Wallet:</div>';
+          html += '<div class="wallet-footer-content">';
+          html += '<div><strong>Coldkey SS58:</strong> ' + j.coldkey + '</div>';
+          html += '<div><strong>Free Balance:</strong> τ' + (j.free_balance_tao || 0).toFixed(9) + '</div>';
+          html += '<div><strong>Total Staked Value:</strong> τ' + (j.total_staked_value_tao || 0).toFixed(9) + '</div>';
+          html += '<div><strong>Total Value:</strong> τ' + (j.total_value_tao || j.free_balance_tao || 0).toFixed(9) + '</div>';
+          html += '</div>';
+          html += '</div>';
+          
+          container.innerHTML = html;
+          return;
+        }
+        
+        let html = '<table class="stake-table"><thead><tr>';
+        html += '<th>NetUID</th>';
+        html += '<th>Value (TAO)</th>';
+        html += '<th>Stake (Alpha)</th>';
+        html += '<th>Price</th>';
+        html += '<th>Hotkey</th>';
+        html += '<th>Action</th>';
+        html += '</tr></thead><tbody>';
+        
+        for (const stake of j.stakes) {
+          const hotkeyEscaped = stake.hotkey_ss58.replace(/'/g, "\\'");
+          html += '<tr>';
+          html += '<td>' + stake.netuid + '</td>';
+          html += '<td>' + stake.value_tao.toFixed(2) + '</td>';
+          html += '<td>' + stake.stake_alpha_tao.toFixed(2) + '</td>';
+          html += '<td>' + stake.price_tao.toFixed(4) + '</td>';
+          html += '<td style="font-size: 0.75rem; word-break: break-all; max-width: 200px;">' + stake.hotkey_ss58 + '</td>';
+          html += '<td><button class="unstake-btn" onclick="unstakeFromTable(' + stake.netuid + ', \'' + hotkeyEscaped + '\', ' + stake.stake_alpha_rao + ')">Unstake</button></td>';
+          html += '</tr>';
+        }
+        
+        html += '</tbody></table>';
+        
+        // Add wallet info footer
+        html += '<div class="wallet-footer">';
+        html += '<div class="wallet-footer-title">Wallet:</div>';
+        html += '<div class="wallet-footer-content">';
+        html += '<div><strong>Coldkey SS58:</strong> ' + j.coldkey + '</div>';
+        html += '<div><strong>Free Balance:</strong> τ' + j.free_balance_tao.toFixed(9) + '</div>';
+        html += '<div><strong>Total Staked Value:</strong> τ' + j.total_staked_value_tao.toFixed(9) + '</div>';
+        html += '<div><strong>Total Value:</strong> τ' + j.total_value_tao.toFixed(9) + '</div>';
+        html += '</div>';
+        html += '</div>';
+        
+        container.innerHTML = html;
+      } catch (e) {
+        container.innerHTML = '<div class="result err">Error: ' + String(e) + '</div>';
+      }
+    }
+
+    function unstakeFromTable(netuid, hotkey, amountAlphaRao) {
+      // Switch to Unstake tab (index 2)
+      activateTabByIndex(2);
+      
+      // Fill the form fields
+      document.getElementById('rs-netuid').value = netuid;
+      document.getElementById('rs-hotkey').value = hotkey;
+      // Leave amount empty to unstake all
+      document.getElementById('rs-amount').value = '';
+      
+      // Submit the unstake
+      postRemoveStake();
     }
   </script>
 </body>
