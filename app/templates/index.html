@@ -207,9 +207,9 @@
 
     <section class="panel" id="panel-move">
       <h2>Move Stake</h2>
-      <small class="hint">Move stake between different hotkeys.</small>
+      <small class="hint">Move stake between different hotkeys. Leave amount empty to move all (alpha).</small>
       <label>Amount (TAO)</label>
-      <input id="ms-amount" type="number" step="any" placeholder="e.g. 0.1" />
+      <input id="ms-amount" type="number" step="any" placeholder="e.g. 0.1 (empty = all)" />
       <label>Origin Netuid</label>
       <input id="ms-origin" type="number" value="1" />
       <label>Destination Netuid</label>
@@ -480,12 +480,13 @@
       }, 'ts-result');
     }
     function postMoveStake() {
+      const amountVal = document.getElementById('ms-amount').value.trim();
       postJson('/api/move-stake', {
         origin_hotkey: document.getElementById('ms-origin-hotkey').value.trim(),
         destination_hotkey: document.getElementById('ms-dest-hotkey').value.trim(),
         origin_netuid: parseInt(document.getElementById('ms-origin').value, 10),
         destination_netuid: parseInt(document.getElementById('ms-dest').value, 10),
-        amount_tao: parseFloat(document.getElementById('ms-amount').value),
+        amount_tao: amountVal === '' ? null : parseFloat(amountVal),
       }, 'ms-result');
     }
     function postWithdraw() {

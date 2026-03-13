@@ -158,7 +158,7 @@ class MoveStakeBody(BaseModel):
     destination_hotkey: str
     origin_netuid: int
     destination_netuid: int
-    amount_tao: float
+    amount_tao: float | None = None
 
 
 class WithdrawBody(BaseModel):
@@ -313,7 +313,16 @@ async def api_transfer_stake(body: TransferStakeBody):
 async def api_move_stake(body: MoveStakeBody):
     try:
         w3, account, contract_address = _get_w3_account_contract()
-        amount_rao = int(body.amount_tao * 10**9)
+        # If amount is None, move all alpha (same as unstake)
+        if body.amount_tao is None:
+            stake_balance = subtensor.get_stake(
+                coldkey_ss58=COLDKEY_SS58,
+                hotkey_ss58=body.origin_hotkey,
+                netuid=body.origin_netuid,
+            )
+            amount_rao = stake_balance.rao - 1
+        else:
+            amount_rao = int(body.amount_tao * 10**9)
         receipt = _run_quiet(
             move_stake,
             w3,
