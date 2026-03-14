@@ -93,6 +93,25 @@
     .wallet-footer-title { font-weight: 600; margin-bottom: 0.5rem; color: var(--text); }
     .wallet-footer-content { font-size: 0.85rem; line-height: 1.8; color: var(--muted); font-family: monospace; }
     .wallet-footer-content div { margin-bottom: 0.25rem; }
+    .subnet-buttons { margin-top: 1rem; }
+    .subnet-buttons-title { font-size: 0.95rem; font-weight: 600; color: var(--muted); margin-bottom: 0.5rem; }
+    .subnet-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .subnet-btn {
+      min-width: 2rem; padding: 0.35rem 0.5rem;
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px; cursor: pointer;
+      font-size: 0.8rem; font-variant-numeric: tabular-nums;
+    }
+    .subnet-btn:hover { background: var(--border); color: var(--text); }
+    .subnet-btn.active-subnet { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .amount-input-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.25rem; }
+    .amount-input-row input { flex: 1; min-width: 10rem; margin-top: 0; }
+    .amount-presets-row { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .amount-preset-btn {
+      padding: 0.4rem 0.75rem; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+    }
+    .amount-preset-btn:hover { background: var(--border); }
     @media (max-width: 1200px) {
       .main-split { flex-direction: column; }
     }
@@ -108,6 +127,10 @@
           <div id="stake-info-container">
             <div class="loading">Loading stake info...</div>
           </div>
+          <div class="subnet-buttons">
+            <div class="subnet-buttons-title">Subnet ID (click to set Stake / Stake Limit / Unstake / Unstake Limit)</div>
+            <div class="subnet-grid" id="subnet-grid"></div>
+          </div>
         </div>
       </div>
       <div class="main-right">
@@ -122,7 +145,16 @@
     <section class="panel active" id="panel-stake">
       <h2>Stake (addStake)</h2>
       <label>Amount (TAO)</label>
-      <input id="stake-amount" type="number" step="any" placeholder="e.g. 0.1" />
+      <div class="amount-input-row">
+        <input id="stake-amount" type="number" step="any" placeholder="e.g. 0.1" />
+        <div class="amount-presets-row">
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(30)">30</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(50)">50</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(100)">100</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(150)">150</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(200)">200</button>
+        </div>
+      </div>
       <small class="hint">Amount will be converted to rao (1 TAO = 10^9 rao)</small>
       <label>Netuid</label>
       <input id="stake-netuid" type="number" value="1" />
@@ -135,7 +167,16 @@
     <section class="panel" id="panel-stake-limit">
       <h2>Stake Limit (addStakeLimit)</h2>
       <label>TAO Amount</label>
-      <input id="sl-amount" type="number" step="any" placeholder="e.g. 60" />
+      <div class="amount-input-row">
+        <input id="sl-amount" type="number" step="any" placeholder="e.g. 60" />
+        <div class="amount-presets-row">
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(30)">30</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(50)">50</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(100)">100</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(150)">150</button>
+          <button type="button" class="amount-preset-btn" onclick="setTaoAmount(200)">200</button>
+        </div>
+      </div>
       <label>Network ID</label>
       <input id="sl-netuid" type="number" value="1" />
       <label>Rate Tolerance</label>
@@ -307,11 +348,53 @@
       }
     }
 
+    // Subnet ID buttons: 0..127 — clicking sets network id for stake, stake limit, unstake, unstake limit
+    const SUBNET_NETWORK_IDS = ['stake-netuid', 'sl-netuid', 'rs-netuid', 'rsl-netuid'];
+    function setTaoAmount(amount) {
+      const val = String(amount);
+      const stakeEl = document.getElementById('stake-amount');
+      const slEl = document.getElementById('sl-amount');
+      if (stakeEl) stakeEl.value = val;
+      if (slEl) slEl.value = val;
+      persistAllInputs();
+    }
+    function setNetworkIdFromSubnet(subnetId) {
+      const val = String(subnetId);
+      SUBNET_NETWORK_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.value = val; }
+      });
+      persistAllInputs();
+      document.querySelectorAll('.subnet-btn').forEach(btn => btn.classList.remove('active-subnet'));
+      const activeBtn = document.querySelector('.subnet-btn[data-subnet-id="' + subnetId + '"]');
+      if (activeBtn) activeBtn.classList.add('active-subnet');
+    }
+    function initSubnetButtons() {
+      const grid = document.getElementById('subnet-grid');
+      if (!grid) return;
+      for (let i = 0; i < 128; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'subnet-btn';
+        btn.dataset.subnetId = i;
+        btn.textContent = i;
+        btn.onclick = () => setNetworkIdFromSubnet(i);
+        grid.appendChild(btn);
+      }
+      // Mark current network id as active if it matches a subnet 0..127
+      const current = parseInt(document.getElementById('stake-netuid').value, 10);
+      if (!isNaN(current) && current >= 0 && current < 128) {
+        const activeBtn = document.querySelector('.subnet-btn[data-subnet-id="' + current + '"]');
+        if (activeBtn) activeBtn.classList.add('active-subnet');
+      }
+    }
+
     // Restore persisted values as soon as DOM loads
     document.addEventListener("DOMContentLoaded", () => {
       restoreAllInputs();
       setupFieldPersistence();
       restoreActiveTab(); // new for tab persist
+      initSubnetButtons();
       loadStakeInfo(); // Load stake info on page load
     });
 
