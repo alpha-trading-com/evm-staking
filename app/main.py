@@ -23,12 +23,14 @@ from dotenv import load_dotenv
 
 load_dotenv(_REPO_ROOT / ".env")
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from web3 import Web3
 from eth_account import Account
+
+from app.auth import get_current_username
 
 from scripts.interact import (
     stake,
@@ -80,17 +82,17 @@ def _run_quiet(fn, *args, **kwargs):
 
 
 @app.get("/")
-async def root():
+async def root(_: str = Depends(get_current_username)):
     return RedirectResponse(url="/ui", status_code=302)
 
 
 @app.get("/ui", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, _: str = Depends(get_current_username)):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/api/status")
-async def api_status():
+async def api_status(_: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
     except Exception as e:
@@ -166,7 +168,7 @@ class WithdrawBody(BaseModel):
 
 
 @app.post("/api/stake")
-async def api_stake(body: StakeBody):
+async def api_stake(body: StakeBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
@@ -179,7 +181,7 @@ async def api_stake(body: StakeBody):
 
 
 @app.post("/api/stake-limit")
-async def api_stake_limit(body: StakeLimitBody):
+async def api_stake_limit(body: StakeLimitBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
@@ -210,7 +212,7 @@ async def api_stake_limit(body: StakeLimitBody):
 
 
 @app.post("/api/remove-stake")
-async def api_remove_stake(body: RemoveStakeBody):
+async def api_remove_stake(body: RemoveStakeBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         
@@ -247,7 +249,7 @@ async def api_remove_stake(body: RemoveStakeBody):
 
 
 @app.post("/api/remove-stake-limit")
-async def api_remove_stake_limit(body: RemoveStakeLimitBody):
+async def api_remove_stake_limit(body: RemoveStakeLimitBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         
@@ -298,7 +300,7 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody):
 
 
 @app.post("/api/transfer-stake")
-async def api_transfer_stake(body: TransferStakeBody):
+async def api_transfer_stake(body: TransferStakeBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
@@ -318,7 +320,7 @@ async def api_transfer_stake(body: TransferStakeBody):
 
 
 @app.post("/api/move-stake")
-async def api_move_stake(body: MoveStakeBody):
+async def api_move_stake(body: MoveStakeBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         # If amount is None, move all alpha; if 0 < amount_tao < 1, treat as fraction of staked
@@ -355,7 +357,7 @@ async def api_move_stake(body: MoveStakeBody):
 
 
 @app.post("/api/withdraw")
-async def api_withdraw(body: WithdrawBody):
+async def api_withdraw(body: WithdrawBody, _: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
         amount_wei = int(body.amount_tao * 10**18)
@@ -372,7 +374,7 @@ class CalcToleranceBody(BaseModel):
 
 
 @app.post("/api/calc-min-tolerance")
-async def api_calc_min_tolerance(body: CalcToleranceBody):
+async def api_calc_min_tolerance(body: CalcToleranceBody, _: str = Depends(get_current_username)):
     """Calculate minimum tolerance for staking/unstaking operations."""
     try:
         if body.operation == "stake":
@@ -397,7 +399,7 @@ async def api_calc_min_tolerance(body: CalcToleranceBody):
 
 
 @app.get("/api/stake-info")
-async def api_stake_info():
+async def api_stake_info(_: str = Depends(get_current_username)):
     """Get stake info for the configured coldkey."""
     try:
         from bittensor import Balance
