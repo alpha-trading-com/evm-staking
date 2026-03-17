@@ -700,8 +700,15 @@ def main():
     if not private_key:
         raise ValueError("PRIVATE_KEY environment variable is required")
     
-    # Connect to blockchain
-    w3 = Web3(Web3.HTTPProvider(rpc_url))
+    # Connect to blockchain (supports HTTP(S) and WS(S) RPC URLs)
+    if rpc_url.startswith(("ws://", "wss://")):
+        provider = Web3.WebsocketProvider(rpc_url)
+    elif rpc_url.startswith(("http://", "https://")):
+        provider = Web3.HTTPProvider(rpc_url)
+    else:
+        raise ValueError(f"Unsupported RPC URL scheme: {rpc_url}")
+
+    w3 = Web3(provider)
     if not w3.is_connected():
         raise ConnectionError(f"Failed to connect to {rpc_url}")
     

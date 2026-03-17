@@ -53,14 +53,28 @@ subtensor = bt.Subtensor(network="finney")
 
 COLDKEY_SS58 = os.getenv("COLDKEY", "5GBY9k83ydqCedqg1NLrWTKy8R6afTkwz5FPSyar3tCcBGQ5")
 
+
+def _make_w3_connection(rpc_url: str) -> Web3:
+    """Create a Web3 connection that supports both HTTP(S) and WS(S) RPC URLs."""
+    if rpc_url.startswith(("ws://", "wss://")):
+        provider = Web3.WebsocketProvider(rpc_url)
+    elif rpc_url.startswith(("http://", "https://")):
+        provider = Web3.HTTPProvider(rpc_url)
+    else:
+        raise ValueError(f"Unsupported RPC URL scheme: {rpc_url}")
+
+    w3 = Web3(provider)
+    if not w3.is_connected():
+        raise RuntimeError(f"Failed to connect to {rpc_url}")
+    return w3
+
+
 def _get_w3_account_contract():
     rpc_url = os.getenv("RPC_URL", "https://test.finney.opentensor.ai/")
     private_key = os.getenv("PRIVATE_KEY")
     if not private_key:
         raise RuntimeError("PRIVATE_KEY is required")
-    w3 = Web3(Web3.HTTPProvider(rpc_url))
-    if not w3.is_connected():
-        raise RuntimeError(f"Failed to connect to {rpc_url}")
+    w3 = _make_w3_connection(rpc_url)
     account = Account.from_key(private_key)
     info = load_deployment_info()
     contract_address = Web3.to_checksum_address(info["contract_address"])
