@@ -10,6 +10,7 @@ import io
 import os
 import sys
 import contextlib
+import threading
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -53,11 +54,35 @@ subtensor = bt.Subtensor(network="finney")
 
 COLDKEY_SS58 = os.getenv("COLDKEY", "5GBY9k83ydqCedqg1NLrWTKy8R6afTkwz5FPSyar3tCcBGQ5")
 
+# Reused Web3 connection to avoid per-request connect delay (reconnects if disconnected).
+# WSS can drop (idle timeout, network, server restart); we reconnect when disconnected
+# or when a connection-related error is seen.
+_w3_cache: tuple | None = None
+_w3_cache_lock = threading.Lock()
+
+
+def _clear_w3_cache() -> None:
+    """Drop cached Web3 connection so next request opens a new one (e.g. after WSS drop)."""
+    global _w3_cache
+    with _w3_cache_lock:
+        _w3_cache = None
+
+
+def _is_connection_error(exc: BaseException) -> bool:
+    """True if the exception is likely from a lost/stale connection (e.g. WSS closed)."""
+    if isinstance(exc, (ConnectionError, BrokenPipeError, OSError)):
+        return True
+    msg = str(exc).lower()
+    return any(
+        x in msg
+        for x in ("connection", "closed", "broken pipe", "reset", "timeout", "websocket")
+    )
+
 
 def _make_w3_connection(rpc_url: str) -> Web3:
     """Create a Web3 connection that supports both HTTP(S) and WS(S) RPC URLs."""
     if rpc_url.startswith(("ws://", "wss://")):
-        provider = Web3.WebsocketProvider(rpc_url)
+        provider = Web3.LegacyWebSocketProvider(rpc_url)
     elif rpc_url.startswith(("http://", "https://")):
         provider = Web3.HTTPProvider(rpc_url)
     else:
@@ -70,15 +95,29 @@ def _make_w3_connection(rpc_url: str) -> Web3:
 
 
 def _get_w3_account_contract():
-    rpc_url = os.getenv("RPC_URL", "https://test.finney.opentensor.ai/")
-    private_key = os.getenv("PRIVATE_KEY")
-    if not private_key:
-        raise RuntimeError("PRIVATE_KEY is required")
-    w3 = _make_w3_connection(rpc_url)
-    account = Account.from_key(private_key)
-    info = load_deployment_info()
-    contract_address = Web3.to_checksum_address(info["contract_address"])
-    return w3, account, contract_address
+    """Return (w3, account, contract_address), reusing a cached connection when still connected."""
+    global _w3_cache
+    with _w3_cache_lock:
+        if _w3_cache is not None:
+            w3, account, contract_address = _w3_cache
+            try:
+                if w3.is_connected(): 
+                    return w3, account, contract_address
+                else:
+                    print(f"Failed to connect to {rpc_url}")
+            except Exception as e:
+                pass
+            _w3_cache = None
+        rpc_url = os.getenv("RPC_URL", "https://test.finney.opentensor.ai/")
+        private_key = os.getenv("PRIVATE_KEY")
+        if not private_key:
+            raise RuntimeError("PRIVATE_KEY is required")
+        w3 = _make_w3_connection(rpc_url)
+        account = Account.from_key(private_key)
+        info = load_deployment_info()
+        contract_address = Web3.to_checksum_address(info["contract_address"])
+        _w3_cache = (w3, account, contract_address)
+        return w3, account, contract_address
 
 
 def _receipt_to_dict(receipt):
@@ -109,9 +148,11 @@ async def index(request: Request, _: str = Depends(get_current_username)):
 async def api_status(_: str = Depends(get_current_username)):
     try:
         w3, account, contract_address = _get_w3_account_contract()
+        balance_wei = w3.eth.get_balance(contract_address)
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
-    balance_wei = w3.eth.get_balance(contract_address)
     balance_tao = float(Web3.from_wei(balance_wei, "ether"))
     try:
         contract = get_contract(w3, contract_address)
@@ -191,6 +232,8 @@ async def api_stake(body: StakeBody, _: str = Depends(get_current_username)):
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
@@ -222,6 +265,8 @@ async def api_stake_limit(body: StakeLimitBody, _: str = Depends(get_current_use
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt), "limit_price_used": limit_price}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
@@ -259,6 +304,8 @@ async def api_remove_stake(body: RemoveStakeBody, _: str = Depends(get_current_u
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
@@ -310,6 +357,8 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody, _: str = Depends(ge
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt), "limit_price_used": limit_price}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
@@ -330,6 +379,8 @@ async def api_transfer_stake(body: TransferStakeBody, _: str = Depends(get_curre
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
@@ -367,6 +418,8 @@ async def api_move_stake(body: MoveStakeBody, _: str = Depends(get_current_usern
         )
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
@@ -378,6 +431,8 @@ async def api_withdraw(body: WithdrawBody, _: str = Depends(get_current_username
         receipt = _run_quiet(withdraw, w3, account, contract_address, amount_wei)
         return {"ok": True, "receipt": _receipt_to_dict(receipt)}
     except Exception as e:
+        if _is_connection_error(e):
+            _clear_w3_cache()
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 

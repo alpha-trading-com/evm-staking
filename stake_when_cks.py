@@ -35,7 +35,7 @@ DEFAULT_HOTKEY = "5Gq2gs4ft5dhhjbHabvVbAhjMCV2RgKmVJKAFCUWiirbRT21"
 def _make_w3_connection(rpc_url: str) -> Web3:
     """Create a Web3 connection that supports both HTTP(S) and WS(S) RPC URLs."""
     if rpc_url.startswith(("ws://", "wss://")):
-        provider = Web3.WebsocketProvider(rpc_url)
+        provider = Web3.LegacyWebSocketProvider(rpc_url)
     elif rpc_url.startswith(("http://", "https://")):
         provider = Web3.HTTPProvider(rpc_url)
     else:

@@ -702,7 +702,7 @@ def main():
     
     # Connect to blockchain (supports HTTP(S) and WS(S) RPC URLs)
     if rpc_url.startswith(("ws://", "wss://")):
-        provider = Web3.WebsocketProvider(rpc_url)
+        provider = Web3.LegacyWebSocketProvider(rpc_url)
     elif rpc_url.startswith(("http://", "https://")):
         provider = Web3.HTTPProvider(rpc_url)
     else:
