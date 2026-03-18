@@ -102,6 +102,7 @@ def _get_w3_account_contract():
             w3, account, contract_address = _w3_cache
             try:
                 if w3.is_connected(): 
+                    print(f"Reusing cached connection to {rpc_url}")
                     return w3, account, contract_address
                 else:
                     print(f"Failed to connect to {rpc_url}")
