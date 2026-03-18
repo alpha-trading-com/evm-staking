@@ -101,14 +101,15 @@ def _get_w3_account_contract():
         if _w3_cache is not None:
             w3, account, contract_address = _w3_cache
             try:
-                if w3.is_connected(): 
-                    print(f"Reusing cached connection to {rpc_url}")
+                if w3.is_connected():
+                    print("Reusing cached connection", file=sys.stderr)
                     return w3, account, contract_address
                 else:
-                    print(f"Failed to connect to {rpc_url}")
+                    print("Cached connection lost", file=sys.stderr)
             except Exception as e:
                 pass
             _w3_cache = None
+        print("Creating new connection", file=sys.stderr)
         rpc_url = os.getenv("RPC_URL", "https://test.finney.opentensor.ai/")
         private_key = os.getenv("PRIVATE_KEY")
         if not private_key:
