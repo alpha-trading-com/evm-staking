@@ -36,7 +36,9 @@ def get_next_nonce(w3, account):
         next_nonce = w3.eth.get_transaction_count(account.address)
         next_nonce += 1
         return next_nonce - 1
-    return next_nonce
+    else:
+        next_nonce += 1
+        return next_nonce - 1
 
 
 def xor_encode(value):
