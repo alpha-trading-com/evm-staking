@@ -592,6 +592,9 @@
         });
         const j = await r.json();
         if (j.ok) {
+          if (typeof j.min_tolerance === 'number') {
+            document.getElementById('sl-tolerance').value = Number(j.min_tolerance).toFixed(6);
+          }
           showResult('sl-result', true, `Min tolerance limit price: ${j.limit_price} rao/alpha`);
         } else {
           showResult('sl-result', false, j.error);
@@ -636,6 +639,9 @@
         });
         const j = await r.json();
         if (j.ok) {
+          if (typeof j.min_tolerance === 'number') {
+            document.getElementById('rsl-tolerance').value = Number(j.min_tolerance).toFixed(6);
+          }
           showResult('rsl-result', true, `Min tolerance limit price: ${j.limit_price} rao/alpha`);
         } else {
           showResult('rsl-result', false, j.error);

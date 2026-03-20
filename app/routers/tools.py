@@ -7,7 +7,12 @@ from app.config import COLDKEY_SS58
 from app.core.config import load_tolerance_offset, update_tolerance_offset
 from app.services import subtensor
 from app.schemas import CalcToleranceBody, ToleranceOffsetBody
-from utils.tolerance import calculate_stake_limit_price, calculate_unstake_limit_price
+from utils.tolerance import (
+    calculate_stake_limit_price,
+    calculate_unstake_limit_price,
+    get_stake_min_tolerance,
+    get_unstake_min_tolerance,
+)
 
 router = APIRouter()
 
@@ -52,6 +57,9 @@ async def api_calc_min_tolerance(body: CalcToleranceBody, _: str = Depends(get_c
                 default_rate_tolerance=0.0,
                 subtensor=subtensor,
             ))
+            min_tolerance = get_stake_min_tolerance(
+                body.tao_amount, body.netuid, subtensor
+            )
         else:
             limit_price = int(calculate_unstake_limit_price(
                 tao_amount=body.tao_amount,
@@ -60,7 +68,15 @@ async def api_calc_min_tolerance(body: CalcToleranceBody, _: str = Depends(get_c
                 default_rate_tolerance=0.0,
                 subtensor=subtensor,
             ))
-        return {"ok": True, "limit_price": limit_price, "operation": body.operation}
+            min_tolerance = get_unstake_min_tolerance(
+                body.tao_amount, body.netuid, subtensor
+            )
+        return {
+            "ok": True,
+            "limit_price": limit_price,
+            "min_tolerance": min_tolerance,
+            "operation": body.operation,
+        }
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
