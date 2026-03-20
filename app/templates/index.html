@@ -456,6 +456,35 @@
       tabButtons.push(b);
     });
 
+    function getCurrentTabIndex() {
+      const idx = tabButtons.findIndex(b => b.classList.contains('active'));
+      return idx >= 0 ? idx : 0;
+    }
+
+    function submitCurrentTab() {
+      const actions = [
+        postStake,
+        postStakeLimit,
+        postRemoveStake,
+        postRemoveStakeLimit,
+        postTransferStake,
+        postMoveStake,
+        postWithdraw,
+        saveToleranceOffset,
+      ];
+      const idx = getCurrentTabIndex();
+      if (idx >= 0 && idx < actions.length && typeof actions[idx] === 'function') {
+        actions[idx]();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        submitCurrentTab();
+      }
+    });
+
     // After all buttons are created, restore the tab if present in localStorage
     // (Otherwise, default is first tab, just as before)
     // (Moved the restoreActiveTab call above to after DOMContentLoaded!)
