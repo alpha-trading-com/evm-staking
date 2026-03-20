@@ -287,28 +287,6 @@ def stake(w3, account, contract_address, hotkey, netuid, amount, contract=None):
     if contract is None:
         contract = get_contract(w3, contract_address)
     
-    # Check contract balance - the precompile checks the contract's balance
-    # Balance from blockchain is in wei (10^18)
-    contract_balance_wei = w3.eth.get_balance(contract_address)
-    contract_balance_tao = Web3.from_wei(contract_balance_wei, 'ether')
-    
-    # Amount is in rao (10^9), convert to TAO for display
-    amount_tao = amount / 10**9
-    
-    print(f"Contract balance: {contract_balance_tao} TAO ({contract_balance_wei} wei)")
-    print(f"Staking amount: {amount_tao} TAO ({amount} rao)")
-    
-    # Convert amount from rao to wei for comparison (1 TAO = 10^18 wei = 10^9 rao)
-    amount_wei = amount * 10**9
-    if contract_balance_wei < amount_wei:
-        print(f"\n❌ ERROR: Contract balance ({contract_balance_tao} TAO) is insufficient!")
-        print(f"   The precompile checks the contract's TAO balance, not your account balance.")
-        print(f"   You need to send {amount_tao} TAO to the contract first.")
-        print(f"\n   To send TAO to the contract, use:")
-        print(f"   Send {amount_tao} TAO to: {contract_address}")
-        print(f"   Or use a wallet/exchange to send TAO to this address.")
-        raise ValueError(f"Insufficient contract balance: need {amount} rao ({amount_tao} TAO), have {contract_balance_wei} wei ({contract_balance_tao} TAO)")
-    
     # Convert hotkey string to bytes32
     hotkey = _convert_hotkey_to_bytes32(hotkey)
     
