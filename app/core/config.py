@@ -42,6 +42,15 @@ def save_tolerance_offset(value: Union[float, str]) -> bool:
         return False
 
 
+def update_tolerance_offset(value: Union[float, str]) -> bool:
+    """Save to file and update in-memory settings so new value is used immediately."""
+    if not save_tolerance_offset(value):
+        return False
+    global settings
+    object.__setattr__(settings, "TOLERANCE_OFFSET", value)
+    return True
+
+
 class Settings(BaseModel):
     VERSION: str = "0.1.0"
     NETWORK: str = "wss://entrypoint-finney.opentensor.ai:443"

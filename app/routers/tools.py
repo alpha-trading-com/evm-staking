@@ -1,14 +1,43 @@
-"""Calc-min-tolerance and stake-info endpoints."""
+"""Calc-min-tolerance, stake-info, and settings (tolerance_offset) endpoints."""
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.auth import get_current_username
 from app.config import COLDKEY_SS58
+from app.core.config import load_tolerance_offset, update_tolerance_offset
 from app.services import subtensor
-from app.schemas import CalcToleranceBody
+from app.schemas import CalcToleranceBody, ToleranceOffsetBody
 from utils.tolerance import calculate_stake_limit_price, calculate_unstake_limit_price
 
 router = APIRouter()
+
+
+# --- Tolerance offset settings ---
+
+@router.get("/api/settings/tolerance-offset")
+async def get_tolerance_offset(_: str = Depends(get_current_username)):
+    """Return current tolerance_offset value (from file)."""
+    try:
+        value = load_tolerance_offset()
+        return {"ok": True, "value": value}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@router.post("/api/settings/tolerance-offset")
+async def set_tolerance_offset(body: ToleranceOffsetBody, _: str = Depends(get_current_username)):
+    """Set tolerance_offset. Use string e.g. \"*1.1\" for multiplier."""
+    try:
+        value = body.value
+        if isinstance(value, (int, float)):
+            value = float(value)
+        else:
+            value = str(value).strip()
+        if not update_tolerance_offset(value):
+            return JSONResponse({"ok": False, "error": "Failed to save tolerance_offset"}, status_code=500)
+        return {"ok": True, "value": value}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
 @router.post("/api/calc-min-tolerance")

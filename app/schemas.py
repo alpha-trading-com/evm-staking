@@ -1,4 +1,5 @@
 """Request body schemas for API endpoints."""
+from typing import Union
 from pydantic import BaseModel
 
 
@@ -55,3 +56,7 @@ class CalcToleranceBody(BaseModel):
     tao_amount: float
     netuid: int
     operation: str = "stake"  # "stake" or "unstake"
+
+
+class ToleranceOffsetBody(BaseModel):
+    value: Union[float, str]  # e.g. 0.001 or "*1.1" for multiplier

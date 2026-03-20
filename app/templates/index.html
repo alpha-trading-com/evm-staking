@@ -271,6 +271,17 @@
       <button class="submit" onclick="postWithdraw()">Submit Withdraw</button>
       <div id="wd-result"></div>
     </section>
+
+    <section class="panel" id="panel-tolerance-offset">
+      <h2>Tolerance Offset</h2>
+      <small class="hint">Offset applied to min tolerance for stake/unstake limit. Number = add to min (e.g. 0.001). Prefix with * for multiplier (e.g. *1.1).</small>
+      <label>Current value</label>
+      <div id="to-current" class="wallet-footer-content" style="margin-top: 0.25rem;">—</div>
+      <label>New value</label>
+      <input id="to-value" type="text" placeholder="e.g. 0.001 or *1.1" />
+      <button class="submit" onclick="saveToleranceOffset()">Save</button>
+      <div id="to-result"></div>
+    </section>
       </div>
     </div>
   </div>
@@ -396,6 +407,7 @@
       restoreActiveTab(); // new for tab persist
       initSubnetButtons();
       loadStakeInfo(); // Load stake info on page load
+      loadToleranceOffset(); // Load tolerance offset for Settings tab
     });
 
     // --- Persistence END ---
@@ -408,6 +420,7 @@
       { id: 'transfer', label: 'Transfer Stake' },
       { id: 'move', label: 'Move Stake' },
       { id: 'withdraw', label: 'Withdraw' },
+      { id: 'tolerance-offset', label: 'Tolerance Offset' },
     ];
 
     // For tab persist, keep references to the tab buttons
@@ -451,6 +464,54 @@
       const el = document.getElementById(elId);
       el.className = 'result ' + (ok ? 'ok' : 'err');
       el.innerHTML = ok ? '✅ Success<pre>' + text + '</pre>' : '❌ Error: ' + text;
+    }
+
+    async function loadToleranceOffset() {
+      const currentEl = document.getElementById('to-current');
+      const valueEl = document.getElementById('to-value');
+      if (!currentEl) return;
+      try {
+        const r = await fetch('/api/settings/tolerance-offset');
+        const j = await r.json();
+        if (j.ok) {
+          const val = String(j.value);
+          currentEl.textContent = val;
+          if (valueEl) valueEl.value = val;
+        } else {
+          currentEl.textContent = 'Error: ' + (j.error || 'unknown');
+        }
+      } catch (e) {
+        currentEl.textContent = 'Error: ' + String(e);
+      }
+    }
+    async function saveToleranceOffset() {
+      const resultEl = document.getElementById('to-result');
+      const valueEl = document.getElementById('to-value');
+      const currentEl = document.getElementById('to-current');
+      const raw = valueEl.value.trim();
+      if (!raw) {
+        showResult('to-result', false, 'Enter a value (e.g. 0.001 or *1.1)');
+        return;
+      }
+      const value = /^\d*\.?\d+$/.test(raw) ? parseFloat(raw) : raw;
+      showResult('to-result', false, 'Saving...');
+      try {
+        const r = await fetch('/api/settings/tolerance-offset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: value }),
+        });
+        const j = await r.json();
+        if (j.ok) {
+          showResult('to-result', true, 'Saved: ' + String(j.value));
+          if (currentEl) currentEl.textContent = String(j.value);
+          valueEl.value = '';
+        } else {
+          showResult('to-result', false, j.error || JSON.stringify(j));
+        }
+      } catch (e) {
+        showResult('to-result', false, String(e));
+      }
     }
 
     async function postJson(url, body, resultId) {
