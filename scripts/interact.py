@@ -28,17 +28,26 @@ load_dotenv()
 XOR_KEY = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
 
 next_nonce = None
+_gas_price_cached = None
+
 
 def get_next_nonce(w3, account):
-    """Return the nonce for account."""
-    global next_nonce
+    """Return the next nonce for account and increment. Fetches from chain only when first used."""
+    global next_nonce, _gas_price_cached
     if next_nonce is None:
-        next_nonce = w3.eth.get_transaction_count(account.address)
-        next_nonce += 1
-        return next_nonce - 1
-    else:
-        next_nonce += 1
-        return next_nonce - 1
+        next_nonce = w3.eth.get_transaction_count(account.address, block_identifier="pending")
+        _gas_price_cached = w3.eth.gas_price
+    nonce = next_nonce
+    next_nonce += 1
+    return nonce
+
+
+def get_gas_price(w3):
+    """Return cached gas price; fetch from chain only when not yet cached (e.g. first tx)."""
+    global _gas_price_cached
+    if _gas_price_cached is None:
+        _gas_price_cached = w3.eth.gas_price
+    return _gas_price_cached
 
 
 def xor_encode(value):
@@ -317,7 +326,7 @@ def stake(w3, account, contract_address, hotkey, netuid, amount, contract=None):
         'from': account.address,
         'nonce': get_next_nonce(w3, account),
         'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
+        'gasPrice': get_gas_price(w3),
     })
     
     # Sign and send
@@ -372,7 +381,7 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
         'from': account.address,
         'nonce': get_next_nonce(w3, account),
         'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
+        'gasPrice': get_gas_price(w3),
     })
     
     # Sign and send
@@ -415,7 +424,7 @@ def remove_stake_limit(w3, account, contract_address, hotkey, netuid, limit_pric
         'from': account.address,
         'nonce': get_next_nonce(w3, account),
         'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
+        'gasPrice': get_gas_price(w3),
     })
     
     # Sign and send
@@ -456,7 +465,7 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount, contract
         'from': account.address,
         'nonce': get_next_nonce(w3, account),
         'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
+        'gasPrice': get_gas_price(w3),
     })
     
     # Sign and send
@@ -505,7 +514,7 @@ def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destina
         'from': account.address,
         'nonce': get_next_nonce(w3, account),
         'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
+        'gasPrice': get_gas_price(w3),
     })
     
     # Sign and send
@@ -547,7 +556,7 @@ def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey,
         'from': account.address,
         'nonce': get_next_nonce(w3, account),
         'gas': 200000,
-        'gasPrice': w3.eth.gas_price,
+        'gasPrice': get_gas_price(w3),
     })
     
     # Sign and send
@@ -617,7 +626,7 @@ def withdraw(w3, account, contract_address, amount, contract=None):
             'from': account.address,
             'nonce': get_next_nonce(w3, account),
             'gas': 150000,  # Increased gas for precompile call
-            'gasPrice': w3.eth.gas_price,
+            'gasPrice': get_gas_price(w3),
         })
     except Exception as e:
         error_str = str(e)
@@ -641,7 +650,7 @@ def withdraw(w3, account, contract_address, amount, contract=None):
             'data': data,
             'nonce': get_next_nonce(w3, account),
             'gas': 100000,
-            'gasPrice': w3.eth.gas_price,
+            'gasPrice': get_gas_price(w3),
         }
     
     # Sign and send
