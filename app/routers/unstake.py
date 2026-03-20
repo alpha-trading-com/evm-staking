@@ -22,7 +22,7 @@ router = APIRouter()
 @router.post("/api/remove-stake")
 async def api_remove_stake(body: RemoveStakeBody, _: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         if body.amount is None:
             stake_balance = subtensor.get_stake(
                 coldkey_ss58=COLDKEY_SS58,
@@ -52,6 +52,7 @@ async def api_remove_stake(body: RemoveStakeBody, _: str = Depends(get_current_u
         receipt = run_quiet(
             remove_stake, w3, account, contract_address,
             body.hotkey, body.netuid, amount_alpha_rao,
+            contract=contract,
         )
         return {"ok": True, "receipt": receipt_to_dict(receipt)}
     except Exception as e:
@@ -63,7 +64,7 @@ async def api_remove_stake(body: RemoveStakeBody, _: str = Depends(get_current_u
 @router.post("/api/remove-stake-limit")
 async def api_remove_stake_limit(body: RemoveStakeLimitBody, _: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         if body.amount is None:
             stake_balance = subtensor.get_stake(
                 coldkey_ss58=COLDKEY_SS58,
@@ -105,6 +106,7 @@ async def api_remove_stake_limit(body: RemoveStakeLimitBody, _: str = Depends(ge
             w3, account, contract_address,
             body.hotkey, body.netuid, limit_price, amount_alpha_rao,
             body.allow_partial,
+            contract=contract,
         )
         return {"ok": True, "receipt": receipt_to_dict(receipt), "limit_price_used": limit_price}
     except Exception as e:

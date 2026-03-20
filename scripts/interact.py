@@ -148,21 +148,39 @@ def load_deployment_info():
         return json.load(f)
 
 
+# Cache ABI and contract instances to avoid file I/O and repeated build on every call
+_cached_abi = None
+_cached_abi_path = None
+_contract_cache: dict[tuple[int, str], object] = {}
+
+
 def get_contract(w3, contract_address, abi=None):
-    """Get contract instance."""
+    """Get contract instance. ABI and instance are cached to avoid delay on repeated calls."""
+    global _cached_abi, _cached_abi_path, _contract_cache
+    addr_checksum = Web3.to_checksum_address(contract_address)
+    cache_key = (id(w3), str(addr_checksum).lower())
+    if cache_key in _contract_cache:
+        return _contract_cache[cache_key]
     if abi is None:
-        # Try to load full ABI from artifacts first
         artifact_path = 'artifacts/contracts/StakeWrap.sol/StakeWrap.json'
-        if os.path.exists(artifact_path):
-            try:
-                with open(artifact_path, 'r') as f:
-                    artifact = json.load(f)
-                    abi = artifact['abi']
-            except:
-                abi = CONTRACT_ABI
+        if _cached_abi is not None and _cached_abi_path == artifact_path:
+            abi = _cached_abi
         else:
-            abi = CONTRACT_ABI
-    return w3.eth.contract(address=contract_address, abi=abi)
+            if os.path.exists(artifact_path):
+                try:
+                    with open(artifact_path, 'r') as f:
+                        artifact = json.load(f)
+                        abi = artifact['abi']
+                    _cached_abi, _cached_abi_path = abi, artifact_path
+                except Exception:
+                    abi = CONTRACT_ABI
+                    _cached_abi, _cached_abi_path = None, None
+            else:
+                abi = CONTRACT_ABI
+                _cached_abi, _cached_abi_path = None, None
+    contract = w3.eth.contract(address=addr_checksum, abi=abi)
+    _contract_cache[cache_key] = contract
+    return contract
 
 
 def ss58_to_bytes32(ss58_address):
@@ -264,9 +282,10 @@ def _convert_hotkey_to_bytes32(hotkey):
     return hotkey
 
 
-def stake(w3, account, contract_address, hotkey, netuid, amount):
+def stake(w3, account, contract_address, hotkey, netuid, amount, contract=None):
     """Stake tokens."""
-    contract = get_contract(w3, contract_address)
+    if contract is None:
+        contract = get_contract(w3, contract_address)
     
     # Check contract balance - the precompile checks the contract's balance
     # Balance from blockchain is in wei (10^18)
@@ -341,9 +360,10 @@ def stake(w3, account, contract_address, hotkey, netuid, amount):
     return receipt
 
 
-def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amount, allow_partial):
+def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amount, allow_partial, contract=None):
     """Stake with limit price."""
-    contract = get_contract(w3, contract_address)
+    if contract is None:
+        contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
     hotkey = _convert_hotkey_to_bytes32(hotkey)
@@ -373,14 +393,15 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
     return receipt
 
 
-def remove_stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amount, allow_partial):
+def remove_stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amount, allow_partial, contract=None):
     """
     Remove stake with limit price (unstake alpha tokens with price limit).
     
     Note: amount is in ALPHA tokens, not TAO/rao!
     The precompile converts alpha back to TAO when unstaking.
     """
-    contract = get_contract(w3, contract_address)
+    if contract is None:
+        contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
     hotkey = _convert_hotkey_to_bytes32(hotkey)
@@ -415,14 +436,15 @@ def remove_stake_limit(w3, account, contract_address, hotkey, netuid, limit_pric
     return receipt
 
 
-def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
+def remove_stake(w3, account, contract_address, hotkey, netuid, amount, contract=None):
     """
     Remove stake (unstake alpha tokens).
     
     Note: amount is in ALPHA tokens, not TAO/rao!
     The precompile converts alpha back to TAO when unstaking.
     """
-    contract = get_contract(w3, contract_address)
+    if contract is None:
+        contract = get_contract(w3, contract_address)
     
     # Convert hotkey string to bytes32
     hotkey = _convert_hotkey_to_bytes32(hotkey)
@@ -455,13 +477,14 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount):
     return receipt
 
 
-def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destination_netuid, amount):
+def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destination_netuid, amount, contract=None):
     """
     Transfer stake (alpha) to the predefined allowed coldkey only.
     
     Safety restriction: can only transfer to the predefined SS58 address set in the contract.
     """
-    contract = get_contract(w3, contract_address)
+    if contract is None:
+        contract = get_contract(w3, contract_address)
     
     # Get the allowed coldkey from the contract
     try:
@@ -503,13 +526,14 @@ def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destina
     return receipt
 
 
-def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey, origin_netuid, destination_netuid, amount):
+def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey, origin_netuid, destination_netuid, amount, contract=None):
     """
     Move stake from one hotkey to another.
     
     This moves stake (alpha) between different hotkeys.
     """
-    contract = get_contract(w3, contract_address)
+    if contract is None:
+        contract = get_contract(w3, contract_address)
     
     # Convert hotkey strings to bytes32
     origin_hotkey = _convert_hotkey_to_bytes32(origin_hotkey)
@@ -545,16 +569,9 @@ def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey,
 
 
 
-def withdraw(w3, account, contract_address, amount):
+def withdraw(w3, account, contract_address, amount, contract=None):
     """Withdraw TAO from the contract."""
-    # Load full ABI from artifacts to ensure we have the correct function signatures
-    artifact_path = 'artifacts/contracts/StakeWrap.sol/StakeWrap.json'
-    if os.path.exists(artifact_path):
-        with open(artifact_path, 'r') as f:
-            artifact = json.load(f)
-            full_abi = artifact['abi']
-        contract = w3.eth.contract(address=contract_address, abi=full_abi)
-    else:
+    if contract is None:
         contract = get_contract(w3, contract_address)
     
     # Verify ownership before attempting withdrawal

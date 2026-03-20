@@ -73,5 +73,3 @@ class Settings(BaseModel):
     TOLERANCE_OFFSET: Union[float, str] = load_tolerance_offset()
     
 settings = Settings()
-
-print(f"USE_ERA: {settings.USE_ERA}")

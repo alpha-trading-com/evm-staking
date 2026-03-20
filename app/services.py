@@ -52,14 +52,14 @@ def _make_w3_connection(rpc_url: str) -> Web3:
 
 
 def get_w3_account_contract():
-    """Return (w3, account, contract_address), reusing a cached connection when still connected."""
+    """Return (w3, account, contract_address, contract), reusing a cached connection when still connected."""
     global _w3_cache
     with _w3_cache_lock:
         if _w3_cache is not None:
-            w3, account, contract_address = _w3_cache
+            w3, account, contract_address, contract = _w3_cache
             try:
                 if w3.is_connected():
-                    return w3, account, contract_address
+                    return w3, account, contract_address, contract
             except Exception:
                 pass
             _w3_cache = None
@@ -71,8 +71,9 @@ def get_w3_account_contract():
         account = Account.from_key(private_key)
         info = load_deployment_info()
         contract_address = Web3.to_checksum_address(info["contract_address"])
-        _w3_cache = (w3, account, contract_address)
-        return w3, account, contract_address
+        contract = get_contract(w3, contract_address)
+        _w3_cache = (w3, account, contract_address, contract)
+    return _w3_cache
 
 
 def receipt_to_dict(receipt) -> dict:

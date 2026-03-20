@@ -21,12 +21,13 @@ router = APIRouter()
 @router.post("/api/transfer-stake")
 async def api_transfer_stake(body: TransferStakeBody, _: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
         receipt = run_quiet(
             transfer_stake,
             w3, account, contract_address,
             body.hotkey, body.origin_netuid, body.destination_netuid, amount_rao,
+            contract=contract,
         )
         return {"ok": True, "receipt": receipt_to_dict(receipt)}
     except Exception as e:
@@ -38,7 +39,7 @@ async def api_transfer_stake(body: TransferStakeBody, _: str = Depends(get_curre
 @router.post("/api/move-stake")
 async def api_move_stake(body: MoveStakeBody, _: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         if body.amount_tao is None:
             stake_balance = subtensor.get_stake(
                 coldkey_ss58=COLDKEY_SS58,
@@ -61,6 +62,7 @@ async def api_move_stake(body: MoveStakeBody, _: str = Depends(get_current_usern
             body.origin_hotkey, body.destination_hotkey,
             body.origin_netuid, body.destination_netuid,
             amount_rao,
+            contract=contract,
         )
         return {"ok": True, "receipt": receipt_to_dict(receipt)}
     except Exception as e:

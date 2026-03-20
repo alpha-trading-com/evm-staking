@@ -21,10 +21,11 @@ router = APIRouter()
 @router.post("/api/stake")
 async def api_stake(body: StakeBody, _: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
         receipt = run_quiet(
-            stake, w3, account, contract_address, body.hotkey, body.netuid, amount_rao
+            stake, w3, account, contract_address, body.hotkey, body.netuid, amount_rao,
+            contract=contract,
         )
         return {"ok": True, "receipt": receipt_to_dict(receipt)}
     except Exception as e:
@@ -36,7 +37,7 @@ async def api_stake(body: StakeBody, _: str = Depends(get_current_username)):
 @router.post("/api/stake-limit")
 async def api_stake_limit(body: StakeLimitBody, _: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         amount_rao = int(body.amount_tao * 10**9)
         limit_price = int(calculate_stake_limit_price(
             tao_amount=body.amount_tao,
@@ -50,6 +51,7 @@ async def api_stake_limit(body: StakeLimitBody, _: str = Depends(get_current_use
             w3, account, contract_address,
             body.hotkey, body.netuid, limit_price, amount_rao,
             body.allow_partial,
+            contract=contract,
         )
         return {"ok": True, "receipt": receipt_to_dict(receipt), "limit_price_used": limit_price}
     except Exception as e:

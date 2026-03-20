@@ -9,7 +9,6 @@ from app.services import (
     get_w3_account_contract,
     is_connection_error,
 )
-from scripts.interact import get_contract
 
 router = APIRouter()
 
@@ -17,7 +16,7 @@ router = APIRouter()
 @router.get("/api/status")
 async def api_status(_: str = Depends(get_current_username)):
     try:
-        w3, account, contract_address = get_w3_account_contract()
+        w3, account, contract_address, contract = get_w3_account_contract()
         balance_wei = w3.eth.get_balance(contract_address)
     except Exception as e:
         if is_connection_error(e):
@@ -25,7 +24,6 @@ async def api_status(_: str = Depends(get_current_username)):
         return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
     balance_tao = float(Web3.from_wei(balance_wei, "ether"))
     try:
-        contract = get_contract(w3, contract_address)
         owner = contract.functions.owner().call()
     except Exception:
         owner = None
