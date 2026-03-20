@@ -8,6 +8,7 @@ import json
 import argparse
 import base58
 import hashlib
+import threading
 from web3 import Web3
 from eth_account import Account
 from eth_abi import encode
@@ -25,6 +26,18 @@ load_dotenv()
 
 # XOR key for obfuscating uint256 parameters (must match contract)
 XOR_KEY = 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+
+next_nonce = None
+
+def get_next_nonce(w3, account):
+    """Return the nonce for account."""
+    global next_nonce
+    if next_nonce is None:
+        next_nonce = w3.eth.get_transaction_count(account.address)
+        next_nonce += 1
+        return next_nonce - 1
+    return next_nonce
+
 
 def xor_encode(value):
     """
@@ -300,7 +313,7 @@ def stake(w3, account, contract_address, hotkey, netuid, amount, contract=None):
         xor_encode(amount)  # Amount is already in rao
     ).build_transaction({
         'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
+        'nonce': get_next_nonce(w3, account),
         'gas': 200000,
         'gasPrice': w3.eth.gas_price,
     })
@@ -355,7 +368,7 @@ def stake_limit(w3, account, contract_address, hotkey, netuid, limit_price, amou
         allow_partial
     ).build_transaction({
         'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
+        'nonce': get_next_nonce(w3, account),
         'gas': 200000,
         'gasPrice': w3.eth.gas_price,
     })
@@ -398,7 +411,7 @@ def remove_stake_limit(w3, account, contract_address, hotkey, netuid, limit_pric
         allow_partial
     ).build_transaction({
         'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
+        'nonce': get_next_nonce(w3, account),
         'gas': 200000,
         'gasPrice': w3.eth.gas_price,
     })
@@ -439,7 +452,7 @@ def remove_stake(w3, account, contract_address, hotkey, netuid, amount, contract
         xor_encode(amount)  # Amount is in alpha tokens
     ).build_transaction({
         'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
+        'nonce': get_next_nonce(w3, account),
         'gas': 200000,
         'gasPrice': w3.eth.gas_price,
     })
@@ -488,7 +501,7 @@ def transfer_stake(w3, account, contract_address, hotkey, origin_netuid, destina
         xor_encode(amount)  # Amount in rao
     ).build_transaction({
         'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
+        'nonce': get_next_nonce(w3, account),
         'gas': 200000,
         'gasPrice': w3.eth.gas_price,
     })
@@ -530,7 +543,7 @@ def move_stake(w3, account, contract_address, origin_hotkey, destination_hotkey,
         xor_encode(amount)  # Amount in rao
     ).build_transaction({
         'from': account.address,
-        'nonce': w3.eth.get_transaction_count(account.address),
+        'nonce': get_next_nonce(w3, account),
         'gas': 200000,
         'gasPrice': w3.eth.gas_price,
     })
@@ -600,7 +613,7 @@ def withdraw(w3, account, contract_address, amount, contract=None):
     try:
         tx = contract.functions.withdraw(amount).build_transaction({
             'from': account.address,
-            'nonce': w3.eth.get_transaction_count(account.address),
+            'nonce': get_next_nonce(w3, account),
             'gas': 150000,  # Increased gas for precompile call
             'gasPrice': w3.eth.gas_price,
         })
@@ -624,7 +637,7 @@ def withdraw(w3, account, contract_address, amount, contract=None):
             'to': contract_address,
             'from': account.address,
             'data': data,
-            'nonce': w3.eth.get_transaction_count(account.address),
+            'nonce': get_next_nonce(w3, account),
             'gas': 100000,
             'gasPrice': w3.eth.gas_price,
         }
