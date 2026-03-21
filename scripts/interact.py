@@ -33,6 +33,7 @@ _gas_price_cached = None
 
 def get_next_nonce(w3, account):
     """Return the next nonce for account and increment. Fetches from chain only when first used."""
+    return w3.eth.get_transaction_count(account.address)
     global next_nonce, _gas_price_cached
     if next_nonce is None:
         next_nonce = w3.eth.get_transaction_count(account.address, block_identifier="pending")
